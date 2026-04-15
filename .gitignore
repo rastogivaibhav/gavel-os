@@ -1,0 +1,48 @@
+# Go build artifacts
+enforcer/gavel
+enforcer/gavel.exe
+enforcer/gavel-enforcer
+enforcer/gavel-enforcer.exe
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Environment files (contain secrets)
+.env
+.env.*
+!.env.example
+
+# JWT keys (auto-generated, never commit)
+control-plane/auth/keys/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test / coverage artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Helm chart dependencies
+deploy/helm/charts/
+deploy/helm/*.lock
