@@ -1,0 +1,858 @@
+{
+  "apis": {
+    "retail.product.v2": {
+      "api_ref": "retail.product.v2",
+      "swagger_url": "https://api.example.com/products/v2/openapi.json",
+      "version": "2.1.0",
+      "base_url": "https://api.example.com/products/v2",
+      "status": "healthy",
+      "methods": [
+        "GET"
+      ],
+      "intent_categories": [
+        "price_check",
+        "stock_check",
+        "compare_products",
+        "trending_product",
+        "celebrity_or_media_reference"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "brand": {
+            "type": "string"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "brand": {
+            "type": "string"
+          },
+          "in_stock": {
+            "type": "boolean"
+          },
+          "attributes": {
+            "type": "object"
+          }
+        }
+      },
+      "avg_latency_ms": 120,
+      "auto_discovered": false
+    },
+    "retail.inventory.v2": {
+      "api_ref": "retail.inventory.v2",
+      "swagger_url": "https://api.example.com/inventory/v2/openapi.json",
+      "version": "2.0.1",
+      "base_url": "https://api.example.com/inventory/v2",
+      "status": "healthy",
+      "methods": [
+        "GET"
+      ],
+      "intent_categories": [
+        "stock_check",
+        "purchase_intent_with_delivery"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "store_id": {
+            "type": "string"
+          },
+          "warehouse_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "in_stock": {
+            "type": "boolean"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "locations": {
+            "type": "array"
+          },
+          "next_restock_date": {
+            "type": "string"
+          }
+        }
+      },
+      "avg_latency_ms": 95,
+      "auto_discovered": false
+    },
+    "retail.pricing.v2": {
+      "api_ref": "retail.pricing.v2",
+      "swagger_url": "https://api.example.com/pricing/v2/openapi.json",
+      "version": "2.0.0",
+      "base_url": "https://api.example.com/pricing/v2",
+      "status": "healthy",
+      "methods": [
+        "GET"
+      ],
+      "intent_categories": [
+        "price_check",
+        "compare_products",
+        "bundle_purchase"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "loyalty_tier": {
+            "type": "string"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "was_price": {
+            "type": "number"
+          },
+          "saving": {
+            "type": "number"
+          },
+          "promotions": {
+            "type": "array"
+          }
+        }
+      },
+      "avg_latency_ms": 110,
+      "auto_discovered": false
+    },
+    "retail.delivery.v2": {
+      "api_ref": "retail.delivery.v2",
+      "swagger_url": "https://api.example.com/delivery/v2/openapi.json",
+      "version": "2.1.0",
+      "base_url": "https://api.example.com/delivery/v2",
+      "status": "healthy",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "intent_categories": [
+        "purchase_intent_with_delivery",
+        "track_order"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "postcode": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "available_options": {
+            "type": "array"
+          },
+          "earliest_date": {
+            "type": "string"
+          },
+          "standard_date": {
+            "type": "string"
+          },
+          "delivery_cost": {
+            "type": "number"
+          }
+        }
+      },
+      "avg_latency_ms": 200,
+      "auto_discovered": false
+    },
+    "retail.staff.v1": {
+      "api_ref": "retail.staff.v1",
+      "swagger_url": "https://api.example.com/staff/v1/openapi.json",
+      "version": "1.2.0",
+      "base_url": "https://api.example.com/staff/v1",
+      "status": "healthy",
+      "methods": [
+        "GET"
+      ],
+      "intent_categories": [
+        "partner_notification",
+        "in_store_appointment"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "datetime": {
+            "type": "string"
+          },
+          "department": {
+            "type": "string"
+          },
+          "skill": {
+            "type": "string"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "available_staff": {
+            "type": "array"
+          },
+          "total_available": {
+            "type": "integer"
+          }
+        }
+      },
+      "avg_latency_ms": 150,
+      "auto_discovered": false
+    },
+    "retail.appointments.v1": {
+      "api_ref": "retail.appointments.v1",
+      "swagger_url": "https://api.example.com/appointments/v1/openapi.json",
+      "version": "1.0.0",
+      "base_url": "https://api.example.com/appointments/v1",
+      "status": "healthy",
+      "methods": [
+        "GET",
+        "POST",
+        "DELETE"
+      ],
+      "intent_categories": [
+        "in_store_appointment"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "service_type": {
+            "type": "string"
+          },
+          "preferred_datetime": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "item_sku": {
+            "type": "string"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "appointment_id": {
+            "type": "string"
+          },
+          "confirmed_datetime": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "store_name": {
+            "type": "string"
+          }
+        }
+      },
+      "avg_latency_ms": 180,
+      "auto_discovered": false
+    },
+    "retail.notifications.v1": {
+      "api_ref": "retail.notifications.v1",
+      "swagger_url": "https://api.example.com/notifications/v1/openapi.json",
+      "version": "1.1.0",
+      "base_url": "https://api.example.com/notifications/v1",
+      "status": "healthy",
+      "methods": [
+        "POST"
+      ],
+      "intent_categories": [
+        "partner_notification"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "staff_id": {
+            "type": "string"
+          },
+          "store_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "item_details": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          },
+          "acknowledged": {
+            "type": "boolean"
+          },
+          "eta_minutes": {
+            "type": "integer"
+          },
+          "notification_id": {
+            "type": "string"
+          }
+        }
+      },
+      "avg_latency_ms": 90,
+      "auto_discovered": false
+    },
+    "retail.loyalty.v1": {
+      "api_ref": "retail.loyalty.v1",
+      "swagger_url": "https://api.example.com/loyalty/v1/openapi.json",
+      "version": "1.0.0",
+      "base_url": "https://api.example.com/loyalty/v1",
+      "status": "healthy",
+      "methods": [
+        "GET"
+      ],
+      "intent_categories": [
+        "gift_finder",
+        "price_check"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "customer_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "points_balance": {
+            "type": "integer"
+          },
+          "tier": {
+            "type": "string"
+          },
+          "vouchers": {
+            "type": "array"
+          }
+        }
+      },
+      "avg_latency_ms": 130,
+      "auto_discovered": false
+    },
+    "retail.cart.v3": {
+      "api_ref": "retail.cart.v3",
+      "swagger_url": "https://api.example.com/cart/v3/openapi.json",
+      "version": "3.0.0",
+      "base_url": "https://api.example.com/cart/v3",
+      "status": "healthy",
+      "methods": [
+        "POST",
+        "GET",
+        "DELETE"
+      ],
+      "intent_categories": [
+        "purchase_intent_with_delivery",
+        "bundle_purchase"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "customer_id": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "cart_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array"
+          },
+          "total": {
+            "type": "number"
+          },
+          "checkout_url": {
+            "type": "string"
+          }
+        }
+      },
+      "avg_latency_ms": 160,
+      "auto_discovered": false
+    },
+    "commerce.product_search.v1": {
+      "api_ref": "commerce.product_search.v1",
+      "swagger_url": "https://api.example.com/commerce/openapi.json",
+      "version": "1.0.0",
+      "base_url": "https://api.example.com/commerce/your-tenant",
+      "provider": "commercetools",
+      "auth": "oauth2_client_credentials",
+      "status": "healthy",
+      "methods": [
+        "POST"
+      ],
+      "intent_categories": [
+        "price_check",
+        "stock_check",
+        "compare_products",
+        "constraint_based_recommendation",
+        "trending_product",
+        "celebrity_or_media_reference"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "object",
+            "description": "Full-text search payload"
+          },
+          "filter": {
+            "type": "array",
+            "description": "Faceted filters (price, category, availability)"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "facets": {
+            "type": "object"
+          }
+        }
+      },
+      "avg_latency_ms": 85,
+      "auto_discovered": false,
+      "notes": "Replaces retail.product.v2 for catalog search. MCP-compatible via Commerce MCP (early access)."
+    },
+    "commerce.prices.v1": {
+      "api_ref": "commerce.prices.v1",
+      "swagger_url": "https://api.example.com/commerce/openapi.json",
+      "version": "1.0.0",
+      "base_url": "https://api.example.com/commerce/your-tenant/standalone-prices",
+      "provider": "commercetools",
+      "auth": "oauth2_client_credentials",
+      "status": "healthy",
+      "methods": [
+        "GET"
+      ],
+      "intent_categories": [
+        "price_check",
+        "compare_products",
+        "bundle_purchase",
+        "gift_finder"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "default": "USD"
+          },
+          "customerGroup": {
+            "type": "string",
+            "description": "Loyalty tier UUID"
+          },
+          "channel": {
+            "type": "string",
+            "description": "Store vs online channel UUID"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "object",
+            "properties": {
+              "centAmount": {
+                "type": "integer"
+              },
+              "currencyCode": {
+                "type": "string"
+              }
+            }
+          },
+          "discounted": {
+            "type": "object"
+          },
+          "validFrom": {
+            "type": "string"
+          },
+          "validUntil": {
+            "type": "string"
+          }
+        }
+      },
+      "avg_latency_ms": 70,
+      "auto_discovered": false,
+      "notes": "Dynamic pricing per customer group and channel. Replaces retail.pricing.v2."
+    },
+    "commerce.inventory.v1": {
+      "api_ref": "commerce.inventory.v1",
+      "swagger_url": "https://api.example.com/commerce/openapi.json",
+      "version": "1.0.0",
+      "base_url": "https://api.example.com/commerce/your-tenant/inventory",
+      "provider": "commercetools",
+      "auth": "oauth2_client_credentials",
+      "status": "healthy",
+      "methods": [
+        "GET"
+      ],
+      "intent_categories": [
+        "stock_check",
+        "purchase_intent_with_delivery",
+        "trending_product"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "supplyChannel": {
+            "type": "string",
+            "description": "Warehouse or store channel UUID"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "availableQuantity": {
+            "type": "integer"
+          },
+          "reservedQuantity": {
+            "type": "integer"
+          },
+          "restockableInDays": {
+            "type": "integer"
+          }
+        }
+      },
+      "avg_latency_ms": 60,
+      "auto_discovered": false,
+      "notes": "Real-time stock. Replaces retail.inventory.v2."
+    },
+    "commerce.customers.v1": {
+      "api_ref": "commerce.customers.v1",
+      "swagger_url": "https://api.example.com/commerce/openapi.json",
+      "version": "1.0.0",
+      "base_url": "https://api.example.com/commerce/your-tenant/customers",
+      "provider": "commercetools",
+      "auth": "oauth2_client_credentials",
+      "status": "healthy",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "intent_categories": [
+        "gift_finder",
+        "constraint_based_recommendation",
+        "partner_notification"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "customerGroupId": {
+            "type": "string"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "customerGroup": {
+            "type": "object"
+          },
+          "custom": {
+            "type": "object"
+          }
+        }
+      },
+      "avg_latency_ms": 100,
+      "auto_discovered": false
+    },
+    "crm.records.v59": {
+      "api_ref": "crm.records.v59",
+      "swagger_url": "https://your-instance.my.salesforce.com/services/data/v59.0",
+      "version": "59.0",
+      "base_url": "https://your-instance.my.salesforce.com/services/data/v59.0",
+      "provider": "salesforce",
+      "auth": "oauth2_password",
+      "status": "healthy",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "intent_categories": [
+        "gift_finder",
+        "partner_notification",
+        "track_order",
+        "initiate_return"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "soql": {
+            "type": "string",
+            "description": "SOQL query string"
+          },
+          "objectType": {
+            "type": "string"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "totalSize": {
+            "type": "integer"
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "records": {
+            "type": "array"
+          }
+        }
+      },
+      "avg_latency_ms": 180,
+      "auto_discovered": false,
+      "notes": "Salesforce CRM — customer 360, service cases, account history."
+    },
+    "loyalty.program.v1": {
+      "api_ref": "loyalty.program.v1",
+      "swagger_url": "https://your-instance.my.salesforce.com/services/data/v59.0/loyalty",
+      "version": "1.0.0",
+      "base_url": "https://your-instance.my.salesforce.com/services/data/v59.0",
+      "provider": "salesforce",
+      "auth": "oauth2_password",
+      "status": "healthy",
+      "methods": [
+        "GET"
+      ],
+      "intent_categories": [
+        "price_check",
+        "gift_finder",
+        "constraint_based_recommendation"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "memberCardNumber": {
+            "type": "string"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string"
+          },
+          "pointsBalance": {
+            "type": "integer"
+          },
+          "pointsValue": {
+            "type": "number"
+          },
+          "benefits": {
+            "type": "array"
+          }
+        }
+      },
+      "avg_latency_ms": 150,
+      "auto_discovered": false,
+      "notes": "Loyalty program tier, points balance, and member benefits. Replaces retail.loyalty.v1."
+    },
+    "orders.management.v1": {
+      "api_ref": "orders.management.v1",
+      "swagger_url": "https://developer.salesforce.com/docs/commerce/commerce-api/references",
+      "version": "1.0.0",
+      "base_url": "https://{shortCode}.api.commercecloud.salesforce.com",
+      "provider": "salesforce",
+      "auth": "oauth2_client_credentials",
+      "status": "healthy",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "intent_categories": [
+        "track_order",
+        "initiate_return",
+        "purchase_intent_with_delivery"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "customerEmail": {
+            "type": "string"
+          },
+          "orderNo": {
+            "type": "string"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array"
+          },
+          "total": {
+            "type": "integer"
+          }
+        }
+      },
+      "avg_latency_ms": 200,
+      "auto_discovered": false,
+      "notes": "Salesforce B2C Commerce Cloud — order management, storefront order history."
+    },
+    "trends.search.v1": {
+      "api_ref": "trends.search.v1",
+      "swagger_url": null,
+      "version": "unofficial",
+      "base_url": "https://trends.google.com/trends/api",
+      "provider": "google",
+      "auth": "none",
+      "status": "healthy",
+      "methods": [
+        "GET"
+      ],
+      "intent_categories": [
+        "trending_product",
+        "celebrity_or_media_reference",
+        "constraint_based_recommendation"
+      ],
+      "request_fields": {
+        "type": "object",
+        "properties": {
+          "keyword": {
+            "type": "string"
+          },
+          "geo": {
+            "type": "string",
+            "description": "ISO 3166-1 alpha-2 country code, e.g. US, GB, DE"
+          },
+          "timeframe": {
+            "type": "string",
+            "default": "today 3-m"
+          }
+        }
+      },
+      "response_fields": {
+        "type": "object",
+        "properties": {
+          "rising_queries": {
+            "type": "array"
+          },
+          "trend_score": {
+            "type": "integer"
+          },
+          "is_breakout": {
+            "type": "boolean"
+          }
+        }
+      },
+      "avg_latency_ms": 800,
+      "auto_discovered": false,
+      "notes": "Unofficial pytrends wrapper. Sentinel monitors with circuit-breaker. No auth required.",
+      "circuit_breaker": true
+    }
+  }
+}
