@@ -1,0 +1,151 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ── Build enforcer binaries for all platforms ────────────────────────────────
+  build-enforcer:
+    name: Build Enforcer (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-latest
+            binary: gavel-enforcer
+          - goos: linux
+            goarch: arm64
+            runner: ubuntu-latest
+            binary: gavel-enforcer
+          - goos: windows
+            goarch: amd64
+            runner: ubuntu-latest
+            binary: gavel-enforcer.exe
+          - goos: windows
+            goarch: arm64
+            runner: ubuntu-latest
+            binary: gavel-enforcer.exe
+          - goos: darwin
+            goarch: amd64
+            runner: ubuntu-latest
+            binary: gavel-enforcer
+          - goos: darwin
+            goarch: arm64
+            runner: ubuntu-latest
+            binary: gavel-enforcer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: enforcer/go.mod
+          cache: true
+
+      - name: Build
+        working-directory: enforcer
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          go build \
+            -ldflags="-s -w -X main.Version=${{ github.ref_name }}" \
+            -o ${{ matrix.binary }} \
+            .
+
+      - name: Rename binary with platform suffix
+        working-directory: enforcer
+        run: |
+          mv ${{ matrix.binary }} gavel-enforcer-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: enforcer-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: enforcer/gavel-enforcer-${{ matrix.goos }}-${{ matrix.goarch }}*
+
+  # ── Build and push Docker image ──────────────────────────────────────────────
+  build-docker:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract version tag
+        id: meta
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build and push control-plane image
+        uses: docker/build-push-action@v5
+        with:
+          context: control-plane
+          file: control-plane/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/gavel-os/gavel-control-plane:${{ steps.meta.outputs.version }}
+            ghcr.io/gavel-os/gavel-control-plane:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Create GitHub Release ────────────────────────────────────────────────────
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-enforcer, build-docker]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all enforcer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          pattern: enforcer-*
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## Gavel OS ${{ github.ref_name }}
+
+            ### Docker Image
+            ```
+            docker pull ghcr.io/gavel-os/gavel-control-plane:${{ github.ref_name }}
+            ```
+
+            ### Enforcer Binaries
+            Pre-built binaries for all supported platforms are attached to this release.
+
+            | Platform | Architecture | File |
+            |---|---|---|
+            | Linux | amd64 | `gavel-enforcer-linux-amd64` |
+            | Linux | arm64 | `gavel-enforcer-linux-arm64` |
+            | Windows | amd64 | `gavel-enforcer-windows-amd64.exe` |
+            | Windows | arm64 | `gavel-enforcer-windows-arm64.exe` |
+            | macOS | amd64 | `gavel-enforcer-darwin-amd64` |
+            | macOS | arm64 | `gavel-enforcer-darwin-arm64` |
+
+            ### Quick Start
+            See [README.md](https://github.com/gavel-os/gavel#quick-start) for setup instructions.

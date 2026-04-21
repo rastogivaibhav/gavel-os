@@ -1,0 +1,46 @@
+# Gavel OS Control Plane — Python Dependencies
+# Pin exact versions for reproducible builds.
+# Update with: pip-compile requirements.in
+
+# ── Web Framework ─────────────────────────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+python-dotenv==1.0.1
+
+# ── Authentication ────────────────────────────────────────────────────────────
+PyJWT==2.10.1
+cryptography==44.0.0
+
+# ── Database ──────────────────────────────────────────────────────────────────
+asyncpg==0.30.0
+
+# ── Cache ─────────────────────────────────────────────────────────────────────
+redis==5.2.1
+
+# ── gRPC (Envoy ext_authz) ────────────────────────────────────────────────────
+grpcio==1.68.1
+grpcio-tools==1.68.1
+googleapis-common-protos==1.66.0
+
+# ── Rate Limiting ─────────────────────────────────────────────────────────────
+slowapi==0.1.9
+limits==3.13.0
+
+# ── Observability ─────────────────────────────────────────────────────────────
+opentelemetry-api==1.29.0
+opentelemetry-sdk==1.29.0
+opentelemetry-instrumentation-fastapi==0.50b0
+opentelemetry-instrumentation-httpx==0.50b0
+opentelemetry-instrumentation-asyncpg==0.50b0
+opentelemetry-instrumentation-redis==0.50b0
+opentelemetry-instrumentation-logging==0.50b0
+opentelemetry-exporter-otlp-proto-grpc==1.29.0
+opentelemetry-exporter-prometheus==0.50b0
+prometheus-client==0.21.1
+
+# ── HTTP Client ───────────────────────────────────────────────────────────────
+httpx==0.28.1
+
+# ── YAML ──────────────────────────────────────────────────────────────────────
+PyYAML==6.0.2

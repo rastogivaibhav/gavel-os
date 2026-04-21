@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Gavel OS macOS Enforcer — launchd agent (audit-only mode)
+
+  Install:
+    sudo cp deploy/launchd/com.gavel.enforcer.plist /Library/LaunchDaemons/
+    sudo launchctl load -w /Library/LaunchDaemons/com.gavel.enforcer.plist
+
+  Uninstall:
+    sudo launchctl unload /Library/LaunchDaemons/com.gavel.enforcer.plist
+    sudo rm /Library/LaunchDaemons/com.gavel.enforcer.plist
+
+  Note: macOS enforcement is audit-only. Network Extension enforcement
+  is a planned future increment. This daemon reports audit-only readiness
+  and maintains a heartbeat with the control plane.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.gavel.enforcer</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/gavel-enforcer</string>
+  </array>
+
+  <!-- Environment variables — set GAVEL_MACHINE_KEY and GAVEL_ENGINE_URL -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>GAVEL_ENGINE_URL</key>
+    <string>http://localhost:8000</string>
+    <!-- Override GAVEL_MACHINE_KEY via launchctl setenv or a secrets manager -->
+    <key>GAVEL_MACHINE_KEY</key>
+    <string></string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/var/log/gavel-enforcer.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/var/log/gavel-enforcer.log</string>
+
+  <!-- Run as root — required for future System Extension enforcement -->
+  <key>UserName</key>
+  <string>root</string>
+</dict>
+</plist>

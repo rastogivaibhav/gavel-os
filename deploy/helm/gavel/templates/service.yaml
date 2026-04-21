@@ -1,0 +1,23 @@
+{{- if .Values.controlPlane.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gavel.fullname" . }}-control-plane
+  namespace: {{ include "gavel.namespace" . }}
+  labels:
+    app: {{ include "gavel.fullname" . }}-control-plane
+    {{- include "gavel.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: {{ include "gavel.fullname" . }}-control-plane
+  ports:
+    - name: http
+      port: {{ .Values.controlPlane.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: {{ .Values.controlPlane.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+  type: {{ .Values.controlPlane.service.type }}
+{{- end }}

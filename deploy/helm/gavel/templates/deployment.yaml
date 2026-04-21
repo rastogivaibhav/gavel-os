@@ -1,0 +1,99 @@
+{{- if .Values.controlPlane.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gavel.fullname" . }}-control-plane
+  namespace: {{ include "gavel.namespace" . }}
+  labels:
+    app: {{ include "gavel.fullname" . }}-control-plane
+    {{- include "gavel.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.controlPlane.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "gavel.fullname" . }}-control-plane
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: {{ include "gavel.fullname" . }}-control-plane
+    spec:
+      serviceAccountName: {{ include "gavel.fullname" . }}-control-plane
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: control-plane
+          image: {{ include "gavel.controlPlane.image" . }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: grpc
+              containerPort: 50051
+          envFrom:
+            - configMapRef:
+                name: {{ include "gavel.fullname" . }}-config
+            {{- if .Values.controlPlane.existingSecret }}
+            - secretRef:
+                name: {{ .Values.controlPlane.existingSecret }}
+            {{- end }}
+          env:
+            {{- range $k, $v := .Values.controlPlane.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- if .Values.controlPlane.grpcTls.existingSecret }}
+            - name: GRPC_TLS_CERT_PATH
+              value: /run/secrets/grpc-tls/server.crt
+            - name: GRPC_TLS_KEY_PATH
+              value: /run/secrets/grpc-tls/server.key
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.controlPlane.grpcTls.existingSecret }}
+            - name: grpc-tls
+              mountPath: /run/secrets/grpc-tls
+              readOnly: true
+            {{- end }}
+            - name: jwt-keys
+              mountPath: /app/auth/keys
+          resources:
+            {{- toYaml .Values.controlPlane.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        {{- if .Values.controlPlane.grpcTls.existingSecret }}
+        - name: grpc-tls
+          secret:
+            secretName: {{ .Values.controlPlane.grpcTls.existingSecret }}
+        {{- end }}
+        - name: jwt-keys
+          {{- if .Values.controlPlane.jwtKeys.existingSecret }}
+          secret:
+            secretName: {{ .Values.controlPlane.jwtKeys.existingSecret }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

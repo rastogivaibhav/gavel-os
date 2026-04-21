@@ -1,0 +1,28 @@
+{
+  "blocked_actions": [
+    "data.delete",
+    "data.drop",
+    "schema.drop",
+    "admin.impersonate",
+    "auth.revoke_all",
+    "system.shutdown",
+    "system.reboot",
+    "network.exfiltrate"
+  ],
+  "blocked_roles": [
+    "banned",
+    "suspended"
+  ],
+  "blocked_targets": [
+    "suspicious-api.io",
+    "doubleclick.net",
+    "malware-c2.example.com"
+  ],
+  "blocked_patterns": [
+    "169.254.",
+    "100.64.",
+    "192.0.2."
+  ],
+  "windows_blocked_targets": [],
+  "linux_blocked_targets": []
+}

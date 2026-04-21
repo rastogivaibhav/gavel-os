@@ -12,10 +12,19 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from api.control_plane import require_machine_auth
+from api.middleware.rate_limit import LIMIT_TELEMETRY, limiter
 from api.runtime_contract import RuntimeEventEnvelope
 
 router = APIRouter()
 logger = logging.getLogger("sentinel.telemetry")
+
+# Decorator helper: no-op when limiter is unavailable
+def _rate_limit(limit_string: str):
+    if limiter is None:
+        def _noop(fn):
+            return fn
+        return _noop
+    return limiter.limit(limit_string)
 
 
 @dataclass
@@ -121,6 +130,7 @@ async def telemetry_endpoint(websocket: WebSocket):
 
 
 @router.post("/internal/telemetry/push", tags=["Telemetry"])
+@_rate_limit(LIMIT_TELEMETRY)
 async def push_telemetry_event(request: Request, event: RuntimeEventEnvelope):
     require_machine_auth(request)
     logger.info(

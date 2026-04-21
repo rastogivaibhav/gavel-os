@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gavel-system
+  labels:
+    app.kubernetes.io/name: gavel
+    app.kubernetes.io/managed-by: helm

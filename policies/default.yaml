@@ -1,0 +1,72 @@
+# Gavel OS — Default YAML Policy
+# Loaded by YamlPolicyLoader at control-plane startup.
+# This policy is evaluated by the SRP VerdictEngine for proposal-level decisions.
+# OPA/Rego policies in policies/rego/ govern network-level enforcement.
+
+name: gavel-default
+version: "1.0.0"
+
+rules:
+  # ── Block: data destruction operations ─────────────────────────────────────
+  - id: block-data-delete
+    description: "Block any agent attempting to delete or drop data"
+    effect: BLOCK
+    priority: 100
+    condition:
+      operations:
+        - delete
+        - drop
+        - truncate
+        - destroy
+
+  # ── Block: privilege escalation attempts ───────────────────────────────────
+  - id: block-privilege-escalation
+    description: "Block privilege escalation and impersonation operations"
+    effect: BLOCK
+    priority: 100
+    condition:
+      operations:
+        - impersonate
+        - sudo
+        - escalate
+        - grant_admin
+
+  # ── Block: external agents in production without elevated clearance ─────────
+  - id: block-external-prod-low-clearance
+    description: "Block external-role agents from prod without clearance level 3+"
+    effect: BLOCK
+    priority: 200
+    condition:
+      roles:
+        - external
+        - anonymous
+      environments:
+        - prod
+
+  # ── Escalate: high-value operations require human review ───────────────────
+  - id: escalate-financial-writes
+    description: "Escalate financial write operations for human review"
+    effect: ESCALATE
+    priority: 300
+    condition:
+      api_refs:
+        - payments.api
+        - billing.api
+        - treasury.api
+      operations:
+        - write
+        - transfer
+        - refund
+
+  # ── Allow: standard read operations ────────────────────────────────────────
+  - id: allow-read-operations
+    description: "Allow standard read operations for authenticated agents"
+    effect: ALLOW
+    priority: 900
+    condition:
+      operations:
+        - read
+        - list
+        - get
+        - search
+        - query

@@ -1,0 +1,65 @@
+{{- if .Values.enforcer.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "gavel.fullname" . }}-enforcer
+  namespace: {{ include "gavel.namespace" . }}
+  labels:
+    app: {{ include "gavel.fullname" . }}-enforcer
+    {{- include "gavel.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "gavel.fullname" . }}-enforcer
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: {{ include "gavel.fullname" . }}-enforcer
+    spec:
+      serviceAccountName: {{ include "gavel.fullname" . }}-enforcer
+      tolerations:
+        {{- toYaml .Values.enforcer.tolerations | nindent 8 }}
+      containers:
+        - name: enforcer
+          image: {{ include "gavel.enforcer.image" . }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: GAVEL_ENGINE_URL
+              value: "http://{{ include "gavel.fullname" . }}-control-plane.{{ include "gavel.namespace" . }}.svc:8000"
+            - name: GAVEL_MACHINE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlPlane.existingSecret | default "gavel-secrets" }}
+                  key: GAVEL_MACHINE_KEY
+            - name: GAVEL_HOST_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            {{- toYaml .Values.enforcer.resources | nindent 12 }}
+          securityContext:
+            capabilities:
+              add: ["BPF", "SYS_ADMIN", "NET_ADMIN"]
+              drop: ["ALL"]
+            allowPrivilegeEscalation: true
+          volumeMounts:
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+            - name: bpf
+              mountPath: /sys/fs/bpf
+      volumes:
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory
+        - name: bpf
+          hostPath:
+            path: /sys/fs/bpf
+            type: DirectoryOrCreate
+      nodeSelector:
+        {{- toYaml .Values.enforcer.nodeSelector | nindent 8 }}
+{{- end }}

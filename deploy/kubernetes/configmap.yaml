@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gavel-config
+  namespace: gavel-system
+  labels:
+    app.kubernetes.io/name: gavel
+data:
+  ENV: "production"
+  OPA_URL: "http://opa.gavel-system.svc:8181"
+  OPA_PACKAGE_PATH: "sentinel/api/authz"
+  OPA_TIMEOUT_SECONDS: "2.0"
+  JWT_EXPIRY_SECONDS: "3600"
+  JWKS_CACHE_TTL_SECONDS: "300"
+  ALLOW_INSECURE_DEV_AUTH: "false"
+  GRPC_INSECURE: "false"
+  GRPC_PORT: "50051"
+  RATE_LIMIT_VALIDATE: "200/minute"
+  RATE_LIMIT_HEARTBEAT: "4/minute"
+  RATE_LIMIT_TELEMETRY: "300/minute"
+  RATE_LIMIT_POLICY: "30/minute"
+  GAVEL_RUNTIME_POLICY_VERSION: "2026-04-21"
+  ENABLE_OTLP: "false"
+  ALLOWED_ORIGINS: "https://your-dashboard.example.com"
+---
+# OPA policy bundle ConfigMap
+# In production, use OPA bundle server or mount policies from a Git-synced volume.
+# This ConfigMap is a minimal bootstrap for cluster-local deployments.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gavel-opa-policies
+  namespace: gavel-system
+  labels:
+    app.kubernetes.io/name: gavel-opa
+binaryData: {}
+# Mount policies/rego/ directory contents here, or use an OPA bundle server.
+# See deploy/kubernetes/opa-deployment.yaml for the volume mount configuration.

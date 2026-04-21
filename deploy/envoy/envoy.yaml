@@ -1,0 +1,99 @@
+static_resources:
+  listeners:
+    - name: listener_0
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 10000
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ingress_http
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                http_filters:
+                  # ── Gavel ext_authz filter ──────────────────────────────────
+                  - name: envoy.filters.http.ext_authz
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                      grpc_service:
+                        envoy_grpc:
+                          cluster_name: gavel_authz
+                        timeout: 2s
+                      transport_api_version: V3
+                      # Forward original request headers to the authz service
+                      include_peer_certificate: false
+                      failure_mode_allow: false  # fail-closed: deny if authz unreachable
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+                route_config:
+                  name: local_route
+                  virtual_hosts:
+                    - name: local_service
+                      domains: ["*"]
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: local_service
+
+  clusters:
+    # ── Gavel control plane gRPC ext_authz ─────────────────────────────────────
+    - name: gavel_authz
+      connect_timeout: 1s
+      type: LOGICAL_DNS
+      lb_policy: ROUND_ROBIN
+      http2_protocol_options: {}
+      load_assignment:
+        cluster_name: gavel_authz
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      # Override with GAVEL_GRPC_HOST env var or update directly.
+                      address: gavel-control-plane
+                      port_value: 50051
+      # ── TLS (enable in production) ──────────────────────────────────────────
+      # Uncomment when gRPC TLS is enabled on the control plane.
+      # For dev, the auto-generated cert is written to GRPC_DEV_CERT_DIR
+      # (default /tmp/gavel-grpc-dev/server.crt).
+      # transport_socket:
+      #   name: envoy.transport_sockets.tls
+      #   typed_config:
+      #     "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+      #     common_tls_context:
+      #       tls_certificates:
+      #         - certificate_chain:
+      #             filename: /etc/gavel/tls/client.crt   # mTLS client cert
+      #           private_key:
+      #             filename: /etc/gavel/tls/client.key
+      #       validation_context:
+      #         trusted_ca:
+      #           filename: /etc/gavel/tls/ca.crt         # or server.crt for self-signed dev
+
+    # ── Upstream service being protected ───────────────────────────────────────
+    - name: local_service
+      connect_timeout: 1s
+      type: LOGICAL_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: local_service
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: 127.0.0.1
+                      port_value: 8080
+
+admin:
+  address:
+    socket_address:
+      address: 127.0.0.1
+      port_value: 9901

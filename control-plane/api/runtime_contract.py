@@ -15,14 +15,45 @@ HOST_ID_HEADER = "x-gavel-host-id"
 MACHINE_KEY_ENV = "GAVEL_MACHINE_KEY"
 
 ALLOWED_METADATA_KEYS = {
+    # ── Core runtime state ────────────────────────────────────────────────────
     "component",
     "status",
-    "latency_ms",
-    "error_class",
-    "target_kind",
-    "count",
     "runtime_mode",
     "enforcement_capable",
+    # ── Performance / diagnostics ─────────────────────────────────────────────
+    "latency_ms",
+    "error_class",
+    "count",
+    # ── Network event fields (Windows/Linux enforcer) ─────────────────────────
+    "target_kind",
+    "process_id",
+    "remote_port",
+    "network_source",
+    # ── Provider / component identity (Windows enforcer) ─────────────────────
+    "process_monitor",
+    "process_monitor_native",
+    "network_monitor",
+    "network_monitor_native",
+    "traffic_enforcer",
+    "traffic_enforcer_native",
+    "diagnostic_warnings",
+    "provider_fallback_active",
+    # ── Linux eBPF enforcer ───────────────────────────────────────────────────
+    "kernel_version",
+    "cgroup_v2",
+    "ebpf_program_status",
+    "control_plane_status",
+    "monitored_pid_count",
+    "blocked_ipv4_count",
+    "proxy_redirect",
+    "reason_description",
+    "recommended_action",
+    "policy_source",
+    # ── macOS runtime ─────────────────────────────────────────────────────────
+    "system_extension_mode",
+    "policy_version",
+    "blocked_target_count",
+    "monitored_proc_count",
 }
 BLOCKED_METADATA_KEYS = {
     "prompt",

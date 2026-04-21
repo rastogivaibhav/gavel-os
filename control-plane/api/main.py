@@ -23,12 +23,16 @@ load_dotenv()
 logger = logging.getLogger("gavel-control-plane")
 
 # ─── Rate Limiting ────────────────────────────────────────────────────────────
+# Limiter is built in api.middleware.rate_limit and imported by route modules.
+# Here we attach it to the app state and register the 429 handler.
 try:
-    from slowapi import Limiter, _rate_limit_exceeded_handler
-    from slowapi.util import get_remote_address
+    from slowapi import _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
-    _limiter = Limiter(key_func=get_remote_address)
-    _RATE_LIMIT_ENABLED = True
+    from api.middleware.rate_limit import limiter as _limiter
+    if _limiter is not None:
+        _RATE_LIMIT_ENABLED = True
+    else:
+        _RATE_LIMIT_ENABLED = False
 except ImportError:
     _limiter = None
     _RATE_LIMIT_ENABLED = False
@@ -124,14 +128,14 @@ app = FastAPI(
         "Gavel — OS-level enforcement runtime for AI agents. "
         "Deterministic policy enforcement with cryptographically chained audit ledger."
     ),
-    version="0.1.0-alpha",
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
 )
 
 # Attach rate limiter to app state
-if _RATE_LIMIT_ENABLED:
+if _RATE_LIMIT_ENABLED and _limiter is not None:
     app.state.limiter = _limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -228,7 +232,7 @@ async def health_check():
     body = {
         "status": status,
         "service": "gavel-control-plane",
-        "version": "0.1.0-alpha",
+        "version": "1.0.0",
         "components": components,
     }
     if status == "degraded":
@@ -324,6 +328,25 @@ async def generate_token(
     return TokenResponse(
         access_token=token,
         expires_in=_JWT_EXPIRY_SECONDS,
+    )
+
+
+@app.get("/auth/jwks", tags=["Auth"])
+@app.get("/.well-known/jwks.json", tags=["Auth"], include_in_schema=False)
+async def jwks_endpoint():
+    """
+    Return the public key set (JWKS) for this control plane.
+
+    Downstream services can fetch this endpoint to verify JWTs without
+    calling back to the control plane on every request. Cache the response
+    for JWKS_CACHE_TTL_SECONDS (default 300s).
+    """
+    from auth.jwt_handler import get_jwks
+    from fastapi.responses import JSONResponse
+    ttl = int(os.getenv("JWKS_CACHE_TTL_SECONDS", "300"))
+    return JSONResponse(
+        content=get_jwks(),
+        headers={"Cache-Control": f"public, max-age={ttl}"},
     )
 
 

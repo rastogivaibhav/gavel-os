@@ -1,0 +1,34 @@
+[Unit]
+Description=Gavel OS Control Plane — Policy engine and audit ledger
+Documentation=https://github.com/gavel-os/gavel
+After=network-online.target postgresql.service redis.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/gavel/control-plane
+ExecStart=/opt/gavel/venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 2
+Restart=on-failure
+RestartSec=5s
+
+EnvironmentFile=-/etc/gavel/control-plane.env
+User=gavel
+Group=gavel
+
+# ── Hardening ────────────────────────────────────────────────────────────────
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gavel-control-plane
+
+[Install]
+WantedBy=multi-user.target

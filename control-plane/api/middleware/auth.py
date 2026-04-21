@@ -7,6 +7,7 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+import sys
 
 from fastapi.responses import JSONResponse
 
@@ -14,7 +15,21 @@ from api.runtime_contract import MACHINE_KEY_ENV, MACHINE_KEY_HEADER
 
 logger = logging.getLogger("sentinel.auth")
 
-_PUBLIC_PATHS = {"/", "/health", "/readyz", "/docs", "/redoc", "/openapi.json", "/auth/token"}
+_PUBLIC_PATHS = {"/", "/health", "/readyz", "/docs", "/redoc", "/openapi.json", "/auth/token", "/auth/jwks", "/.well-known/jwks.json"}
+
+# ── Startup guard: ALLOW_INSECURE_DEV_AUTH must never be enabled outside dev ──
+_insecure_dev_auth_raw = os.getenv("ALLOW_INSECURE_DEV_AUTH", "false").lower()
+_env = os.getenv("ENV", "production")
+
+if _insecure_dev_auth_raw == "true" and _env != "development":
+    logger.critical(
+        "FATAL: ALLOW_INSECURE_DEV_AUTH=true is set but ENV=%s. "
+        "This flag bypasses all authentication and must never be enabled outside "
+        "a local development environment. "
+        "Set ENV=development or remove ALLOW_INSECURE_DEV_AUTH.",
+        _env,
+    )
+    sys.exit(1)
 
 
 class AuthMiddleware:
@@ -29,17 +44,21 @@ class AuthMiddleware:
             return
 
         path = scope["path"]
-        env = os.getenv("ENV", "production")
-        insecure_dev_auth = os.getenv("ALLOW_INSECURE_DEV_AUTH", "false").lower() == "true"
+        # _env and _insecure_dev_auth_raw are module-level; startup guard already
+        # rejected the combination ENV!=development + ALLOW_INSECURE_DEV_AUTH=true.
+        insecure_dev_auth = _insecure_dev_auth_raw == "true" and _env == "development"
         if (
-            (env == "development" and insecure_dev_auth)
+            insecure_dev_auth
             or path in _PUBLIC_PATHS
             or path == "/ui"
             or path.startswith("/ui/")
         ):
             # In dev-bypass mode, stamp gavel_auth_mode so require_machine_auth
             # and any other scope-state consumers don't 401 on internal endpoints.
-            if env == "development" and insecure_dev_auth:
+            if insecure_dev_auth:
+                logger.warning(
+                    "ALLOW_INSECURE_DEV_AUTH is active — all authentication bypassed for %s", path
+                )
                 scope.setdefault("state", {})["gavel_auth_mode"] = "machine"
             await self.app(scope, receive, send)
             return

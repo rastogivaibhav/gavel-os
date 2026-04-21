@@ -1,0 +1,19 @@
+apiVersion: v2
+name: gavel
+description: OS-level enforcement runtime for AI agents
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - ai-agents
+  - security
+  - enforcement
+  - ebpf
+  - opa
+home: https://github.com/gavel-os/gavel
+sources:
+  - https://github.com/gavel-os/gavel
+maintainers:
+  - name: Gavel OS
+    url: https://github.com/gavel-os/gavel
+dependencies: []

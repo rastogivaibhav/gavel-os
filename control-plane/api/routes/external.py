@@ -17,6 +17,13 @@ from api.control_plane import (
     evaluate_runtime_decision,
     require_machine_auth,
 )
+from api.middleware.rate_limit import (
+    LIMIT_HEARTBEAT,
+    LIMIT_POLICY,
+    LIMIT_TELEMETRY,
+    LIMIT_VALIDATE,
+    limiter,
+)
 from api.routes import query as query_route
 from api.routes.telemetry import manager as telemetry_manager
 from api.runtime_contract import (
@@ -35,6 +42,14 @@ from srp.sdk.models import AuditEvent
 
 router = APIRouter()
 logger = logging.getLogger("sentinel.external")
+
+# Decorator helper: no-op when limiter is unavailable
+def _rate_limit(limit_string: str):
+    if limiter is None:
+        def _noop(fn):
+            return fn
+        return _noop
+    return limiter.limit(limit_string)
 
 
 class IngestRequest(BaseModel):
@@ -202,6 +217,7 @@ async def detect_agent(request: Request, payload: MachineAgentDetectionRequest):
 
 
 @router.post("/heartbeat", response_model=MachineHeartbeatResponse)
+@_rate_limit(LIMIT_HEARTBEAT)
 async def runtime_heartbeat(request: Request, payload: MachineHeartbeatRequest):
     require_machine_auth(request)
     control_plane_status = _control_plane_status(request)
@@ -235,6 +251,7 @@ async def runtime_heartbeat(request: Request, payload: MachineHeartbeatRequest):
 
 
 @router.post("/runtime/validate")
+@_rate_limit(LIMIT_VALIDATE)
 async def validate_runtime_action(request: Request, payload: MachineValidateRequest):
     require_machine_auth(request)
     decision = evaluate_runtime_decision(
@@ -286,6 +303,7 @@ async def validate_runtime_action(request: Request, payload: MachineValidateRequ
 
 
 @router.post("/runtime/policy", response_model=MachinePolicyResponse)
+@_rate_limit(LIMIT_POLICY)
 async def get_runtime_policy(request: Request, payload: MachinePolicyRequest):
     require_machine_auth(request)
     policy = build_runtime_policy(

@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "gavel.fullname" . }}-control-plane
+  namespace: {{ include "gavel.namespace" . }}
+  labels:
+    {{- include "gavel.labels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "gavel.fullname" . }}-enforcer
+  namespace: {{ include "gavel.namespace" . }}
+  labels:
+    {{- include "gavel.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "gavel.fullname" . }}-control-plane
+  namespace: {{ include "gavel.namespace" . }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "gavel.fullname" . }}-control-plane
+  namespace: {{ include "gavel.namespace" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "gavel.fullname" . }}-control-plane
+    namespace: {{ include "gavel.namespace" . }}
+roleRef:
+  kind: Role
+  name: {{ include "gavel.fullname" . }}-control-plane
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "gavel.fullname" . }}-enforcer
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "gavel.fullname" . }}-enforcer
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "gavel.fullname" . }}-enforcer
+    namespace: {{ include "gavel.namespace" . }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "gavel.fullname" . }}-enforcer
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gavel-control-plane
+  namespace: gavel-system
+  labels:
+    app.kubernetes.io/name: gavel-control-plane
+spec:
+  selector:
+    app: gavel-control-plane
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: 50051
+      targetPort: grpc
+      protocol: TCP
+  type: ClusterIP

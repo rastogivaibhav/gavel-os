@@ -1,0 +1,53 @@
+[Unit]
+Description=Gavel OS Enforcer — OS-level enforcement runtime for AI agents
+Documentation=https://github.com/gavel-os/gavel
+After=network-online.target
+Wants=network-online.target
+# Restart if the control plane is temporarily unreachable at boot
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/gavel-enforcer
+Restart=on-failure
+RestartSec=5s
+
+# Environment — override via /etc/gavel/enforcer.env
+EnvironmentFile=-/etc/gavel/enforcer.env
+
+# Required: set GAVEL_MACHINE_KEY and GAVEL_ENGINE_URL in the EnvironmentFile.
+# Example /etc/gavel/enforcer.env:
+#   GAVEL_ENGINE_URL=http://control-plane.internal:8000
+#   GAVEL_MACHINE_KEY=<32-byte hex secret>
+
+# ── Privilege model ──────────────────────────────────────────────────────────
+# The enforcer needs CAP_BPF (or CAP_SYS_ADMIN on older kernels) to attach
+# eBPF programs to cgroup sockets. All other capabilities are dropped.
+User=root
+CapabilityBoundingSet=CAP_BPF CAP_SYS_ADMIN CAP_NET_ADMIN
+AmbientCapabilities=CAP_BPF CAP_SYS_ADMIN CAP_NET_ADMIN
+NoNewPrivileges=false
+
+# ── Hardening ────────────────────────────────────────────────────────────────
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=false
+ProtectKernelTunables=false
+ProtectKernelModules=true
+ProtectControlGroups=false
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictRealtime=true
+SystemCallFilter=@system-service @network-io bpf perf_event_open
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gavel-enforcer
+
+[Install]
+WantedBy=multi-user.target

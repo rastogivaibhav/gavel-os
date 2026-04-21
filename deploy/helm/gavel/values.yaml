@@ -1,0 +1,105 @@
+# Gavel Helm Chart — Default Values
+# Override with: helm install gavel ./deploy/helm/gavel -f my-values.yaml
+
+global:
+  imageRegistry: ghcr.io/gavel-os
+  imagePullPolicy: IfNotPresent
+
+# ── Control Plane ─────────────────────────────────────────────────────────────
+controlPlane:
+  enabled: true
+  image:
+    repository: gavel-control-plane
+    tag: "1.0.0"
+  replicas: 2
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "512Mi"
+  service:
+    type: ClusterIP
+    httpPort: 8000
+    grpcPort: 50051
+  env:
+    ENV: "production"
+    JWT_EXPIRY_SECONDS: "3600"
+    JWKS_CACHE_TTL_SECONDS: "300"
+    ALLOW_INSECURE_DEV_AUTH: "false"
+    GRPC_INSECURE: "false"
+    RATE_LIMIT_VALIDATE: "200/minute"
+    RATE_LIMIT_HEARTBEAT: "4/minute"
+    RATE_LIMIT_TELEMETRY: "300/minute"
+    RATE_LIMIT_POLICY: "30/minute"
+    ENABLE_OTLP: "false"
+  # Reference an existing secret containing:
+  #   GAVEL_MACHINE_KEY, API_SECRET_KEY, ADMIN_SECRET_KEY,
+  #   METRICS_SECRET_KEY, DATABASE_URL, REDIS_URL
+  existingSecret: ""
+  # TLS for gRPC ext_authz
+  grpcTls:
+    # Reference an existing secret with server.crt, server.key (and optionally ca.crt)
+    existingSecret: "gavel-grpc-tls"
+  # JWT key secret (optional — auto-generated if not provided)
+  jwtKeys:
+    existingSecret: ""
+
+# ── Enforcer DaemonSet ────────────────────────────────────────────────────────
+enforcer:
+  enabled: true
+  image:
+    repository: gavel-enforcer
+    tag: "1.0.0"
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+  # nodeSelector restricts the DaemonSet to Linux nodes
+  nodeSelector:
+    kubernetes.io/os: linux
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+# ── OPA ───────────────────────────────────────────────────────────────────────
+opa:
+  enabled: true
+  image:
+    repository: openpolicyagent/opa
+    tag: "0.70.0"
+  replicas: 2
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+
+# ── PostgreSQL (external recommended for production) ─────────────────────────
+postgres:
+  # Set to false and provide DATABASE_URL in existingSecret for external DB
+  enabled: true
+  image: postgres:16-alpine
+  storage: "10Gi"
+  storageClass: ""
+
+# ── Redis (external recommended for production) ───────────────────────────────
+redis:
+  enabled: true
+  image: redis:7-alpine
+  storage: "1Gi"
+  storageClass: ""
+
+# ── Network Policies ──────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true
+
+# ── Namespace ─────────────────────────────────────────────────────────────────
+namespaceOverride: ""

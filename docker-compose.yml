@@ -1,0 +1,115 @@
+version: "3.9"
+
+# Gavel OS — Local development stack
+# Starts: control-plane, OPA, PostgreSQL, Redis
+#
+# Usage:
+#   cp .env.example .env   # fill in secrets
+#   docker compose up
+
+services:
+
+  # ── PostgreSQL audit ledger ─────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gavel
+      POSTGRES_USER: gavel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gavel_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gavel -d gavel"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Redis (rate limiting + session cache) ───────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-gavel_dev_redis}
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-gavel_dev_redis}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Open Policy Agent ───────────────────────────────────────────────────────
+  opa:
+    image: openpolicyagent/opa:0.70.0
+    restart: unless-stopped
+    command:
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - --log-level=info
+      - --bundle
+      - /policies
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./policies/rego:/policies:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8181/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Gavel Control Plane ─────────────────────────────────────────────────────
+  control-plane:
+    build:
+      context: ./control-plane
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    environment:
+      ENV: development
+      DATABASE_URL: postgres://gavel:${POSTGRES_PASSWORD:-gavel_dev_password}@postgres:5432/gavel
+      REDIS_URL: redis://:${REDIS_PASSWORD:-gavel_dev_redis}@redis:6379/0
+      OPA_URL: http://opa:8181
+      GAVEL_MACHINE_KEY: ${GAVEL_MACHINE_KEY:-dev-machine-key-change-in-production}
+      API_SECRET_KEY: ${API_SECRET_KEY:-dev-api-key-change-in-production}
+      ADMIN_SECRET_KEY: ${ADMIN_SECRET_KEY:-dev-admin-secret-change-in-production}
+      METRICS_SECRET_KEY: ${METRICS_SECRET_KEY:-dev-metrics-key}
+      JWT_EXPIRY_SECONDS: "3600"
+      ALLOW_INSECURE_DEV_AUTH: "false"
+      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:8000"
+      # gRPC TLS — dev uses auto-generated self-signed cert
+      GRPC_INSECURE: "false"
+      GRPC_DEV_CERT_DIR: "/tmp/gavel-grpc-dev"
+      GRPC_PORT: "50051"
+      # Rate limiting
+      RATE_LIMIT_VALIDATE: "200/minute"
+      RATE_LIMIT_HEARTBEAT: "4/minute"
+      RATE_LIMIT_TELEMETRY: "300/minute"
+      RATE_LIMIT_POLICY: "30/minute"
+      # JWKS
+      JWKS_CACHE_TTL_SECONDS: "300"
+    ports:
+      - "8000:8000"   # REST API
+      - "50051:50051" # gRPC ext_authz
+    volumes:
+      - jwt_keys:/app/auth/keys
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+volumes:
+  postgres_data:
+  jwt_keys:
