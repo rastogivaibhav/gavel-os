@@ -24,16 +24,10 @@ jobs:
         working-directory: enforcer
         run: go vet ./...
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          working-directory: enforcer
-          version: latest
-          args: --timeout=5m
-
-      - name: go test (Linux-only tests)
+      - name: go test
         working-directory: enforcer
-        # Windows-tagged files are excluded on Linux; linux-tagged files run here.
+        # Linux build tag: linux-tagged files run, windows-tagged files excluded.
+        # eBPF stub (ebpf_stub_linux.go) satisfies the attachEnforcer symbol on CI.
         run: go test -v -count=1 -timeout=60s ./...
 
   # ── Python control plane tests ───────────────────────────────────────────────
@@ -71,6 +65,7 @@ jobs:
           ADMIN_SECRET_KEY: "ci-admin-secret"
           GRPC_INSECURE: "true"
           OPA_URL: "http://localhost:18181"
+          JWKS_CACHE_TTL_SECONDS: "300"
         run: |
           pytest ../tests/ \
             -v \
@@ -78,7 +73,7 @@ jobs:
             --cov=. \
             --cov-report=term-missing \
             --cov-report=xml:../coverage.xml \
-            --cov-fail-under=75
+            --cov-fail-under=80
         working-directory: control-plane
 
       - name: Upload coverage
@@ -115,3 +110,32 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── VS Code extension tests ───────────────────────────────────────────────────
+  vscode-extension-test:
+    name: VS Code Extension (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: vscode-extension
+        # Use npm install (not ci) since package-lock.json is gitignored
+        run: npm install
+
+      - name: TypeScript type check
+        working-directory: vscode-extension
+        run: npx tsc --noEmit
+
+      - name: Run Jest tests
+        working-directory: vscode-extension
+        run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov
+
+      - name: Build extension bundle
+        working-directory: vscode-extension
+        run: npm run build

@@ -13,8 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Non-root user
+# Non-root user — create keys directory with correct ownership before switching
 RUN useradd -r -u 1001 -g root gavel && \
+    mkdir -p /app/auth/keys && \
     chown -R gavel:root /app
 USER gavel
 

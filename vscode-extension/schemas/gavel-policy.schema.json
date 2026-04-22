@@ -1,0 +1,44 @@
+{
+  "title": "Gavel Policy",
+  "description": "Gavel OS YAML policy. Mirrors PolicySet/PolicyRule/PolicyCondition in srp/policy.py",
+  "type": "object",
+  "required": ["name", "version", "rules"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": ["string", "number"] },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "effect", "condition"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "effect": {
+            "type": "string",
+            "enum": ["ALLOW", "BLOCK", "ESCALATE", "allow", "block", "escalate"]
+          },
+          "priority": { "type": "integer", "minimum": 0, "default": 1000 },
+          "condition": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tenants": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+              "roles": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+              "environments": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "enum": ["dev", "staging", "prod"] }
+              },
+              "api_refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+              "operations": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+              "max_numeric_parameters": { "type": "object", "additionalProperties": { "type": "number" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

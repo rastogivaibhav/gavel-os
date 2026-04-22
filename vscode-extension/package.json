@@ -1,0 +1,206 @@
+{
+  "name": "gavel",
+  "displayName": "Gavel — AI Agent Enforcement",
+  "description": "Policy validation, live enforcement monitoring, and audit ledger for Gavel OS",
+  "version": "1.0.0",
+  "publisher": "gavel-os",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Linters", "Visualization", "Other"],
+  "keywords": ["ai", "agents", "security", "policy", "enforcement", "opa", "ebpf", "gavel"],
+  "repository": { "type": "git", "url": "https://github.com/gavel-os/gavel" },
+  "license": "Apache-2.0",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "Gavel",
+      "properties": {
+        "gavel.controlPlaneUrl": {
+          "type": "string",
+          "default": "http://localhost:18000",
+          "description": "URL of the Gavel control plane. Default works with docker compose up."
+        },
+        "gavel.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your API_SECRET_KEY from .env. Leave blank to use auto-detection."
+        },
+        "gavel.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Connect to the control plane automatically on startup."
+        },
+        "gavel.telemetryEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show live enforcement events in the monitor panel."
+        },
+        "gavel.validateOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Validate policy YAML files automatically when saved."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gavel-sidebar",
+          "title": "Gavel",
+          "icon": "media/gavel-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "gavel-sidebar": [
+        {
+          "id": "gavelWelcome",
+          "name": "Gavel",
+          "when": "!gavel.connected"
+        },
+        {
+          "id": "gavelEnforcerStatus",
+          "name": "Enforcer Status",
+          "when": "gavel.connected"
+        },
+        {
+          "id": "gavelAuditLedger",
+          "name": "Audit Ledger",
+          "when": "gavel.connected"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "gavelWelcome",
+        "contents": "Gavel is installed.\n\n**Policy validation works right now** — open any `.yaml` file in a `policies/` folder and errors appear automatically.\n\nTo enable the live monitor and audit ledger, start the control plane:\n\n[Start with Docker Compose](command:gavel.startDockerCompose)\n\nOr if it's already running:\n\n[Connect to Control Plane](command:gavel.connect)\n\n[Open Settings](command:workbench.action.openSettings?%5B%22gavel%22%5D)"
+      },
+      {
+        "view": "gavelAuditLedger",
+        "contents": "No audit entries found in the last 24 hours.\n\n[Refresh](command:gavel.refreshAuditLedger)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "gavel.openMonitor",
+        "title": "Gavel: Open Live Monitor",
+        "icon": "$(pulse)",
+        "category": "Gavel"
+      },
+      {
+        "command": "gavel.runPreflight",
+        "title": "Gavel: Run Enforcer Preflight",
+        "icon": "$(checklist)",
+        "category": "Gavel"
+      },
+      {
+        "command": "gavel.testProposal",
+        "title": "Gavel: Test Policy Proposal",
+        "icon": "$(beaker)",
+        "category": "Gavel"
+      },
+      {
+        "command": "gavel.verifyChain",
+        "title": "Gavel: Verify Audit Chain",
+        "icon": "$(shield)",
+        "category": "Gavel"
+      },
+      {
+        "command": "gavel.mintToken",
+        "title": "Gavel: Mint JWT Token",
+        "icon": "$(key)",
+        "category": "Gavel"
+      },
+      {
+        "command": "gavel.refreshAuditLedger",
+        "title": "Gavel: Refresh Audit Ledger",
+        "icon": "$(refresh)",
+        "category": "Gavel"
+      },
+      {
+        "command": "gavel.validatePolicy",
+        "title": "Gavel: Validate Policy File",
+        "icon": "$(check-all)",
+        "category": "Gavel"
+      },
+      {
+        "command": "gavel.connect",
+        "title": "Gavel: Connect to Control Plane",
+        "icon": "$(plug)",
+        "category": "Gavel"
+      },
+      {
+        "command": "gavel.startDockerCompose",
+        "title": "Gavel: Start with Docker Compose",
+        "icon": "$(play)",
+        "category": "Gavel"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "gavel.testProposal",
+          "when": "resourceExtname == .yaml && resourcePath =~ /policies/",
+          "group": "gavel@1"
+        },
+        {
+          "command": "gavel.validatePolicy",
+          "when": "resourceExtname == .yaml && resourcePath =~ /policies/",
+          "group": "gavel@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "gavel.refreshAuditLedger",
+          "when": "view == gavelAuditLedger",
+          "group": "navigation"
+        },
+        {
+          "command": "gavel.openMonitor",
+          "when": "view == gavelEnforcerStatus",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "gavel.validatePolicy",
+          "when": "resourceExtname == .yaml && resourcePath =~ /policies/",
+          "group": "navigation"
+        }
+      ]
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": "**/policies/**/*.yaml",
+        "url": "./schemas/gavel-policy.schema.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "lint": "eslint src --ext ts",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "esbuild": "^0.20.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "ws": "^8.16.0"
+  }
+}

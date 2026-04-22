@@ -3,6 +3,15 @@ enforcer/gavel
 enforcer/gavel.exe
 enforcer/gavel-enforcer
 enforcer/gavel-enforcer.exe
+# Any compiled Go binary committed by mistake
+enforcer/*.exe
+enforcer/gavel-enforcer-*
+
+# VS Code extension build artifacts and dependencies
+vscode-extension/dist/
+vscode-extension/node_modules/
+vscode-extension/coverage/
+vscode-extension/*.vsix
 
 # Python bytecode
 __pycache__/
@@ -42,7 +51,11 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+coverage.xml
 
 # Helm chart dependencies
 deploy/helm/charts/
 deploy/helm/*.lock
+
+# Temporary files created by start scripts
+/tmp/gavel-*

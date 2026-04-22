@@ -1,5 +1,7 @@
 package sentinel.runtime.policy
 
+import rego.v1
+
 # ---------------------------------------------------------------------------
 # Gavel OS — Runtime Network Action Policy
 #

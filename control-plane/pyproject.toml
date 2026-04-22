@@ -24,3 +24,24 @@ warn_return_any = false
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "--tb=short -q"
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/telemetry/setup.py",
+    "*/tools/*",
+    "*/api/envoy_ext_auth_pb2*.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
+show_missing = true
+fail_under = 80

@@ -1,5 +1,7 @@
 package sentinel.api.authz
 
+import rego.v1
+
 # ---------------------------------------------------------------------------
 # Gavel OS — Base Authorization Policy
 #

@@ -41,7 +41,7 @@ docker compose up -d
 This starts PostgreSQL, Redis, OPA, and the Gavel control plane. Wait ~15 seconds for all health checks to pass, then verify:
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:18000/health
 ```
 
 A healthy response looks like:
@@ -67,7 +67,7 @@ A healthy response looks like:
 ## 3. Get a JWT token
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:8000/auth/token \
+TOKEN=$(curl -s -X POST http://localhost:18000/auth/token \
   -H "Content-Type: application/json" \
   -d '{"role": "customer", "tenant_id": "default", "clearance_level": 2}' \
   | jq -r .access_token)
@@ -77,13 +77,13 @@ TOKEN=$(curl -s -X POST http://localhost:8000/auth/token \
 
 ```bash
 # Should be allowed (read operation, clearance 2)
-curl -s -X POST http://localhost:8000/external/validate \
+curl -s -X POST http://localhost:18000/external/validate \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"action": "read.data", "method": "GET", "required_clearance": 1}' | jq .
 
 # Should be denied (blocked action)
-curl -s -X POST http://localhost:8000/external/validate \
+curl -s -X POST http://localhost:18000/external/validate \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"action": "data.delete", "method": "EXECUTE", "required_clearance": 1}' | jq .
@@ -101,7 +101,7 @@ GOOS=linux GOARCH=amd64 go build -o gavel-enforcer .
 sudo ./gavel-enforcer -preflight
 
 # Start with control plane connection
-export GAVEL_ENGINE_URL=http://localhost:8000
+export GAVEL_ENGINE_URL=http://localhost:18000
 export GAVEL_MACHINE_KEY=<your-machine-key-from-.env>
 sudo ./gavel-enforcer
 ```
@@ -113,7 +113,7 @@ cd enforcer
 $env:GOOS = 'windows'; $env:GOARCH = 'amd64'
 go build -o gavel-enforcer.exe .
 
-$env:GAVEL_ENGINE_URL = "http://localhost:8000"
+$env:GAVEL_ENGINE_URL = "http://localhost:18000"
 $env:GAVEL_MACHINE_KEY = "<your-machine-key-from-.env>"
 .\gavel-enforcer.exe
 ```
@@ -121,7 +121,7 @@ $env:GAVEL_MACHINE_KEY = "<your-machine-key-from-.env>"
 ## 7. View the audit ledger
 
 ```bash
-curl -s -X POST http://localhost:8000/audit/ledger \
+curl -s -X POST http://localhost:18000/audit/ledger \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -134,7 +134,7 @@ curl -s -X POST http://localhost:8000/audit/ledger \
 ## 8. Verify chain integrity
 
 ```bash
-curl -s -X POST http://localhost:8000/audit/verify \
+curl -s -X POST http://localhost:18000/audit/verify \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{}' | jq .
