@@ -38,7 +38,10 @@ except ImportError:
     _RATE_LIMIT_ENABLED = False
     logger.warning("slowapi not installed — rate limiting disabled. Run: pip install slowapi")
 
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from api.routes import telemetry as telemetry_router
+from api.routes import ui as ui_router
 from api.middleware.auth import AuthMiddleware
 from api.middleware.security_headers import SecurityHeadersMiddleware
 from api.runtime_contract import HOST_ID_HEADER, MACHINE_KEY_ENV, MACHINE_KEY_HEADER
@@ -281,6 +284,16 @@ try:
     app.include_router(audit_router.router, prefix="/audit", tags=["Audit"])
 except ImportError:
     logger.warning("Audit routes not available")
+
+# ─── UI Routes ────────────────────────────────────────────────────────────────
+app.include_router(ui_router.router)
+
+# ─── Static Files ──────────────────────────────────────────────────────────────
+static_dir = Path(__file__).parent.parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+else:
+    logger.warning(f"Static directory not found at {static_dir}")
 
 # ─── Auth Token Endpoint ─────────────────────────────────────────────────────
 

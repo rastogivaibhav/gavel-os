@@ -59,3 +59,15 @@ deploy/helm/*.lock
 
 # Temporary files created by start scripts
 /tmp/gavel-*
+
+# Node.js / Tailwind
+control-plane/node_modules/
+control-plane/package-lock.json
+control-plane/static/css/output.css.map
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
