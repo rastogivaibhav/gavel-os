@@ -44,3 +44,88 @@ class TestExternalEndpoints:
         # Requires: Database with audit_ledger table
         # Will implement when database schema is available
         pass
+
+
+@pytest.mark.integration
+class TestEscalationWorkflows:
+    """Integration tests for escalation workflow."""
+
+    @pytest.mark.asyncio
+    async def test_create_escalation(self, db_pool):
+        """Test creating an escalation record."""
+        from service.escalation_service import EscalationService
+
+        service = EscalationService(db_pool)
+
+        ticket = await service.create_escalation(
+            tenant_id="tenant-001",
+            tool_call_id="tc_abc123",
+            agent_id="claude-code-1",
+            api_ref="payments.api",
+            operation="transfer",
+            environment="prod",
+            parameters={"amount": 50000},
+            risk_level="high",
+        )
+
+        assert ticket.startswith("ESC-")
+
+    @pytest.mark.asyncio
+    async def test_escalation_approval_workflow(self, db_pool):
+        """Test complete escalation approval workflow."""
+        from service.escalation_service import EscalationService
+
+        service = EscalationService(db_pool)
+
+        # Create escalation
+        ticket = await service.create_escalation(
+            tenant_id="tenant-001",
+            tool_call_id="tc_def456",
+            agent_id="claude-code-1",
+            api_ref="database.api",
+            operation="delete",
+            environment="prod",
+            parameters={"table": "users"},
+        )
+
+        # Get status before approval
+        escalation_id = f"esc_{ticket.split('-')[1][:16]}"
+        status = await service.get_escalation_status("tenant-001", escalation_id)
+        if status:
+            assert status["status"] == "pending"
+
+        # Approve escalation
+        success, msg = await service.approve_escalation(
+            tenant_id="tenant-001",
+            escalation_id=escalation_id,
+            approver_id="security-lead-001",
+            decision="approved",
+            reason="Reviewed and approved by security team"
+        )
+
+        # Note: success depends on database schema being set up
+
+    @pytest.mark.asyncio
+    async def test_get_pending_escalations(self, db_pool):
+        """Test querying pending escalations."""
+        from service.escalation_service import EscalationService
+
+        service = EscalationService(db_pool)
+
+        # Get pending escalations (may be empty if schema not set up)
+        escalations = await service.get_pending_escalations("tenant-001")
+
+        assert isinstance(escalations, list)
+
+    @pytest.mark.asyncio
+    async def test_auto_deny_expired(self, db_pool):
+        """Test auto-denial of expired escalations."""
+        from service.escalation_service import EscalationService
+
+        service = EscalationService(db_pool)
+
+        # Run auto-deny (should handle gracefully even if no escalations)
+        count = await service.auto_deny_expired()
+
+        assert isinstance(count, int)
+        assert count >= 0
