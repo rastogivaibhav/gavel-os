@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+  <link href="/static/css/output.css" rel="stylesheet">
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GAVEL OS - Policy Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-dim": "#cfdaf2",
+            "on-error-container": "#93000a",
+            "secondary-fixed-dim": "#b7c8e1",
+            "on-tertiary-fixed": "#001e2f",
+            "surface-tint": "#006c4a",
+            "on-primary": "#ffffff",
+            "tertiary-fixed-dim": "#89ceff",
+            "on-tertiary": "#ffffff",
+            "on-background": "#111c2d",
+            "error-container": "#ffdad6",
+            "surface-container-lowest": "#ffffff",
+            "surface": "#f9f9ff",
+            "surface-variant": "#d8e3fb",
+            "surface-container-high": "#dee8ff",
+            "on-tertiary-fixed-variant": "#004c6e",
+            "primary-container": "#00855d",
+            "on-primary-container": "#f5fff7",
+            "secondary-container": "#d0e1fb",
+            "on-surface": "#111c2d",
+            "on-primary-fixed-variant": "#005137",
+            "background": "#f9f9ff",
+            "inverse-on-surface": "#ecf1ff",
+            "surface-container-low": "#f0f3ff",
+            "secondary": "#505f76",
+            "outline": "#6d7a72",
+            "on-secondary-container": "#54647a",
+            "primary-fixed-dim": "#68dba9",
+            "on-primary-fixed": "#002114",
+            "surface-container": "#e7eeff",
+            "on-secondary-fixed": "#0b1c30",
+            "on-tertiary-container": "#fcfcff",
+            "on-secondary": "#ffffff",
+            "primary": "#006948",
+            "outline-variant": "#bccac0",
+            "error": "#ba1a1a",
+            "on-error": "#ffffff",
+            "primary-fixed": "#85f8c4",
+            "tertiary": "#00628d",
+            "surface-container-highest": "#d8e3fb",
+            "secondary-fixed": "#d3e4fe",
+            "surface-bright": "#f9f9ff",
+            "on-surface-variant": "#3d4a42",
+            "tertiary-fixed": "#c9e6ff",
+            "inverse-surface": "#263143",
+            "tertiary-container": "#007cb1",
+            "on-secondary-fixed-variant": "#38485d",
+            "inverse-primary": "#68dba9"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "unit": "8px",
+            "stack-lg": "32px",
+            "container-margin": "32px",
+            "gutter": "24px",
+            "component-padding-x": "16px",
+            "component-padding-y": "10px",
+            "stack-sm": "8px",
+            "stack-md": "16px"
+          },
+          "fontFamily": {
+            "title-sm": ["Inter"],
+            "display-lg": ["Space Grotesk"],
+            "display-xl": ["Space Grotesk"],
+            "label-caps": ["Space Grotesk"],
+            "body-sm": ["Inter"],
+            "headline-md": ["Space Grotesk"],
+            "mono-data": ["Space Grotesk"],
+            "body-md": ["Inter"]
+          },
+          "fontSize": {
+            "title-sm": ["18px", {"lineHeight": "1.5", "fontWeight": "600"}],
+            "display-lg": ["30px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+            "display-xl": ["36px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+            "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700"}],
+            "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+            "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+            "mono-data": ["14px", {"lineHeight": "1.4", "letterSpacing": "-0.01em", "fontWeight": "500"}],
+            "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    body {
+      background-color: #f9f9ff;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body class="font-body-md text-on-background">
+<!-- SideNavBar -->
+<aside class="bg-white h-screen w-64 fixed left-0 top-0 border-r border-slate-200 flex flex-col py-6 z-50">
+<div class="px-6 mb-10">
+<div class="flex items-center gap-3">
+<div class="bg-primary p-1.5 rounded">
+<span class="material-symbols-outlined text-white text-xl" data-icon="gavel">gavel</span>
+</div>
+<div>
+<h1 class="text-emerald-600 text-xl font-black font-display-lg leading-none">GAVEL OS</h1>
+<p class="text-slate-500 text-[10px] uppercase tracking-widest font-bold">Enterprise Security</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center px-6 py-3 gap-3 text-slate-500 hover:bg-slate-50 transition-all duration-150 font-body-sm" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+        Dashboard
+      </a>
+<a class="flex items-center px-6 py-3 gap-3 text-slate-500 hover:bg-slate-50 transition-all duration-150 font-body-sm" href="#">
+<span class="material-symbols-outlined" data-icon="history_edu">history_edu</span>
+        Audit Ledger
+      </a>
+<a class="flex items-center px-6 py-3 gap-3 bg-emerald-50 text-emerald-600 border-r-4 border-emerald-600 font-bold transition-all duration-150 font-body-sm" href="#">
+<span class="material-symbols-outlined" data-icon="policy">policy</span>
+        Policies
+      </a>
+<a class="flex items-center px-6 py-3 gap-3 text-slate-500 hover:bg-slate-50 transition-all duration-150 font-body-sm" href="#">
+<span class="material-symbols-outlined" data-icon="edit_note">edit_note</span>
+        Editor
+      </a>
+<a class="flex items-center px-6 py-3 gap-3 text-slate-500 hover:bg-slate-50 transition-all duration-150 font-body-sm" href="#">
+<span class="material-symbols-outlined" data-icon="monitoring">monitoring</span>
+        Live Monitor
+      </a>
+</nav>
+<div class="mt-auto pt-6 border-t border-slate-100 space-y-1">
+<a class="flex items-center px-6 py-3 gap-3 text-slate-500 hover:bg-slate-50 transition-all duration-150 font-body-sm" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+        Support
+      </a>
+<a class="flex items-center px-6 py-3 gap-3 text-slate-500 hover:bg-slate-50 transition-all duration-150 font-body-sm" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+        Account
+      </a>
+</div>
+</aside>
+<!-- TopAppBar -->
+<header class="bg-white flex justify-between items-center h-16 px-8 ml-64 w-[calc(100%-16rem)] border-b border-slate-200 sticky top-0 z-40">
+<div class="flex items-center gap-4">
+<h2 class="font-display-lg text-title-sm text-slate-900">Policies</h2>
+<span class="h-4 w-px bg-slate-200"></span>
+<span class="font-mono-data text-emerald-600 text-xs font-bold tracking-wider">System Status: Online</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-lg" data-icon="search">search</span>
+<input class="pl-10 pr-4 py-1.5 bg-slate-50 border-slate-200 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all w-64" placeholder="Search policies..." type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="ml-64 p-8 min-h-[calc(100vh-4rem)]">
+<div class="max-w-7xl mx-auto space-y-8">
+<!-- Header Actions Section -->
+<div class="flex justify-between items-end">
+<div>
+<h1 class="font-display-xl text-display-xl text-slate-900 tracking-tight">Policies</h1>
+<p class="font-body-md text-slate-500 mt-1">Manage Rego policy bundles for cloud infrastructure governance.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white text-slate-700 font-title-sm text-body-sm rounded-lg hover:bg-slate-50 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-lg" data-icon="upload">upload</span>
+            Import
+          </button>
+<button class="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white text-slate-700 font-title-sm text-body-sm rounded-lg hover:bg-slate-50 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-lg" data-icon="download">download</span>
+            Export
+          </button>
+<button class="flex items-center gap-2 px-6 py-2 bg-primary text-white font-title-sm text-body-sm rounded-lg hover:bg-primary-container active:scale-95 transition-all shadow-sm">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+            New Policy
+          </button>
+</div>
+</div>
+<!-- Bento Layout Content -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Table Side (8 Columns) -->
+<div class="col-span-12 lg:col-span-8 space-y-6">
+<div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+<div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+<h3 class="font-headline-md text-title-sm text-slate-900">Policy Inventory</h3>
+<div class="flex items-center gap-2">
+<span class="text-xs font-mono-data text-slate-400">Total: 4 active</span>
+<span class="material-symbols-outlined text-slate-400 cursor-pointer" data-icon="filter_list">filter_list</span>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-white border-b border-slate-100">
+<th class="px-6 py-4 font-label-caps text-slate-500 uppercase tracking-widest text-[10px]">Policy Name</th>
+<th class="px-6 py-4 font-label-caps text-slate-500 uppercase tracking-widest text-[10px]">Rules</th>
+<th class="px-6 py-4 font-label-caps text-slate-500 uppercase tracking-widest text-[10px]">Last Updated</th>
+<th class="px-6 py-4 font-label-caps text-slate-500 uppercase tracking-widest text-[10px]">Status</th>
+<th class="px-6 py-4"></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-50">
+<!-- Row 1 Selected -->
+<tr class="bg-emerald-50/30 group hover:bg-emerald-50 transition-colors cursor-pointer">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-emerald-600" data-icon="gavel">gavel</span>
+<div>
+<p class="font-title-sm text-sm text-slate-900">prod-iam-enforcer</p>
+<p class="text-xs text-slate-500">v2.4.1</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="font-mono-data text-sm text-slate-600">12 active</span>
+</td>
+<td class="px-6 py-4">
+<p class="font-mono-data text-sm text-slate-600">2h ago</p>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">Enforcing</span>
+</td>
+<td class="px-6 py-4 text-right">
+<span class="material-symbols-outlined text-slate-400" data-icon="chevron_right">chevron_right</span>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-slate-50 transition-colors cursor-pointer">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-400" data-icon="shield">shield</span>
+<div>
+<p class="font-title-sm text-sm text-slate-900">network-segmentation</p>
+<p class="text-xs text-slate-500">v1.0.8</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="font-mono-data text-sm text-slate-600">45 active</span>
+</td>
+<td class="px-6 py-4">
+<p class="font-mono-data text-sm text-slate-600">1d ago</p>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">Enforcing</span>
+</td>
+<td class="px-6 py-4 text-right">
+<span class="material-symbols-outlined text-slate-400" data-icon="chevron_right">chevron_right</span>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-slate-50 transition-colors cursor-pointer">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-400" data-icon="database">database</span>
+<div>
+<p class="font-title-sm text-sm text-slate-900">storage-encryption</p>
+<p class="text-xs text-slate-500">v3.2.0</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="font-mono-data text-sm text-slate-600">8 active</span>
+</td>
+<td class="px-6 py-4">
+<p class="font-mono-data text-sm text-slate-600">3d ago</p>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wider">Audit Only</span>
+</td>
+<td class="px-6 py-4 text-right">
+<span class="material-symbols-outlined text-slate-400" data-icon="chevron_right">chevron_right</span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-slate-50 transition-colors cursor-pointer">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-400" data-icon="lock_reset">lock_reset</span>
+<div>
+<p class="font-title-sm text-sm text-slate-900">secrets-rotation</p>
+<p class="text-xs text-slate-500">v0.9.1</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="font-mono-data text-sm text-slate-600">14 active</span>
+</td>
+<td class="px-6 py-4">
+<p class="font-mono-data text-sm text-slate-600">1w ago</p>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider">Disabled</span>
+</td>
+<td class="px-6 py-4 text-right">
+<span class="material-symbols-outlined text-slate-400" data-icon="chevron_right">chevron_right</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Detail Side (4 Columns) -->
+<div class="col-span-12 lg:col-span-4 space-y-6">
+<div class="bg-white rounded-xl border border-emerald-200 overflow-hidden shadow-md">
+<div class="px-6 py-5 bg-emerald-600">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-headline-md text-white">prod-iam-enforcer</h3>
+<p class="text-emerald-100 text-xs font-mono-data">UUID: 8f2b-411a-98c2</p>
+</div>
+<button class="bg-white/20 p-2 rounded-lg hover:bg-white/30 transition-colors">
+<span class="material-symbols-outlined text-white" data-icon="edit">edit</span>
+</button>
+</div>
+</div>
+<div class="p-6 space-y-6">
+<!-- Description -->
+<section>
+<h4 class="font-label-caps text-slate-400 uppercase tracking-widest text-[10px] mb-2">Description</h4>
+<p class="text-body-sm text-slate-700 leading-relaxed">
+                  Enforces strict IAM roles and permission boundaries across all AWS production accounts. Prevents creation of wildcard policy statements.
+                </p>
+</section>
+<!-- Version History -->
+<section>
+<h4 class="font-label-caps text-slate-400 uppercase tracking-widest text-[10px] mb-3">Version History</h4>
+<div class="space-y-4 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-px before:bg-slate-100">
+<div class="relative pl-8">
+<div class="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-emerald-100 border-2 border-emerald-600 z-10"></div>
+<div class="flex justify-between items-start">
+<div>
+<p class="font-title-sm text-sm text-slate-900">v2.4.1 (Current)</p>
+<p class="text-xs text-slate-500">Updated by J. Miller</p>
+</div>
+<span class="font-mono-data text-[10px] text-slate-400">2h ago</span>
+</div>
+</div>
+<div class="relative pl-8">
+<div class="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-slate-100 border-2 border-slate-300 z-10"></div>
+<div class="flex justify-between items-start">
+<div>
+<p class="font-title-sm text-sm text-slate-600">v2.4.0</p>
+<p class="text-xs text-slate-400">Policy optimization</p>
+</div>
+<span class="font-mono-data text-[10px] text-slate-400">3d ago</span>
+</div>
+</div>
+<div class="relative pl-8">
+<div class="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-slate-100 border-2 border-slate-300 z-10"></div>
+<div class="flex justify-between items-start">
+<div>
+<p class="font-title-sm text-sm text-slate-600">v2.3.9</p>
+<p class="text-xs text-slate-400">Bugfix for S3 actions</p>
+</div>
+<span class="font-mono-data text-[10px] text-slate-400">1w ago</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Metrics -->
+<div class="grid grid-cols-2 gap-4">
+<div class="p-3 bg-slate-50 rounded-lg border border-slate-100">
+<p class="font-label-caps text-slate-400 uppercase text-[9px]">Last Trigger</p>
+<p class="font-display-lg text-emerald-600 text-lg">14m ago</p>
+</div>
+<div class="p-3 bg-slate-50 rounded-lg border border-slate-100">
+<p class="font-label-caps text-slate-400 uppercase text-[9px]">Violations</p>
+<p class="font-display-lg text-red-600 text-lg">0</p>
+</div>
+</div>
+<!-- Quick Action -->
+<button class="w-full py-2.5 border border-slate-200 rounded-lg font-title-sm text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="visibility">visibility</span>
+                View Rego Source
+              </button>
+</div>
+</div>
+<!-- Secondary Insight Card -->
+<div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm overflow-hidden relative">
+<div class="absolute top-0 right-0 p-2 opacity-5">
+<span class="material-symbols-outlined text-8xl" data-icon="policy">policy</span>
+</div>
+<h4 class="font-title-sm text-slate-900 mb-2">Policy Health Score</h4>
+<div class="flex items-end gap-2">
+<span class="text-4xl font-display-xl text-emerald-600">98</span>
+<span class="text-slate-400 mb-1 font-mono-data">/ 100</span>
+</div>
+<p class="text-xs text-slate-500 mt-2">All high-priority compliance checks are currently passing across all clusters.</p>
+<div class="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-500 w-[98%]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Decorative Context Image (Hidden from layout, used for data-alt) -->
+<div class="hidden">
+<img data-alt="Close-up of a high-tech server rack with green LED lights blinking in a clean, modern data center environment with cool lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDX-YqTE5FVkZNgIeGRs1kUJbPRpDG8OP3Cn6OHJqw0E0EzfO94lH2arGsigU316Iga4aip2ItXciUIwPPR54XHo5Ut7yibLZnYYy4XSJOykanCX9HitI9LJCyJnHn492hklh6kZurvCiCs12W22uISjGC6Q3QfvBgp8r16AwiiX5XuUnyLcrr9q0pgQHbcRCUj-OvyGHvPD0s91zAp_2bDZrDNNh7eAJ_NWmB8pPleXNOhFCP1ZLouW1McgkYrsJChnmed0Xd7XYNE"/>
+</div>
+</body></html>

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+  <link href="/static/css/output.css" rel="stylesheet">
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#cfdaf2",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed-dim": "#b7c8e1",
+                        "on-tertiary-fixed": "#001e2f",
+                        "surface-tint": "#006c4a",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed-dim": "#89ceff",
+                        "on-tertiary": "#ffffff",
+                        "on-background": "#111c2d",
+                        "error-container": "#ffdad6",
+                        "surface-container-lowest": "#ffffff",
+                        "surface": "#f9f9ff",
+                        "surface-variant": "#d8e3fb",
+                        "surface-container-high": "#dee8ff",
+                        "on-tertiary-fixed-variant": "#004c6e",
+                        "primary-container": "#00855d",
+                        "on-primary-container": "#f5fff7",
+                        "secondary-container": "#d0e1fb",
+                        "on-surface": "#111c2d",
+                        "on-primary-fixed-variant": "#005137",
+                        "background": "#f9f9ff",
+                        "inverse-on-surface": "#ecf1ff",
+                        "secondary": "#505f76",
+                        "outline": "#6d7a72",
+                        "on-secondary-container": "#54647a",
+                        "primary-fixed-dim": "#68dba9",
+                        "on-primary-fixed": "#002114",
+                        "surface-container": "#e7eeff",
+                        "on-secondary-fixed": "#0b1c30",
+                        "on-tertiary-container": "#fcfcff",
+                        "on-secondary": "#ffffff",
+                        "primary": "#006948",
+                        "outline-variant": "#bccac0",
+                        "error": "#ba1a1a",
+                        "on-error": "#ffffff",
+                        "primary-fixed": "#85f8c4",
+                        "tertiary": "#00628d",
+                        "surface-container-highest": "#d8e3fb",
+                        "secondary-fixed": "#d3e4fe",
+                        "surface-bright": "#f9f9ff",
+                        "on-surface-variant": "#3d4a42",
+                        "tertiary-fixed": "#c9e6ff",
+                        "inverse-surface": "#263143",
+                        "tertiary-container": "#007cb1",
+                        "on-secondary-fixed-variant": "#38485d",
+                        "inverse-primary": "#68dba9"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "8px",
+                        "stack-lg": "32px",
+                        "container-margin": "32px",
+                        "gutter": "24px",
+                        "component-padding-x": "16px",
+                        "component-padding-y": "10px",
+                        "stack-sm": "8px",
+                        "stack-md": "16px"
+                    },
+                    "fontFamily": {
+                        "title-sm": ["Inter"],
+                        "display-lg": ["Space Grotesk"],
+                        "display-xl": ["Space Grotesk"],
+                        "label-caps": ["Space Grotesk"],
+                        "body-sm": ["Inter"],
+                        "headline-md": ["Space Grotesk"],
+                        "mono-data": ["Space Grotesk"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "title-sm": ["18px", {"lineHeight": "1.5", "fontWeight": "600"}],
+                        "display-lg": ["30px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "display-xl": ["36px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "mono-data": ["14px", {"lineHeight": "1.4", "letterSpacing": "-0.01em", "fontWeight": "500"}],
+                        "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        .editor-bg { background-color: #FAFAFB; }
+        .token-keyword { color: #006948; font-weight: 600; }
+        .token-string { color: #007cb1; }
+        .token-comment { color: #6d7a72; font-style: italic; }
+        .token-boolean { color: #ba1a1a; }
+    </style>
+</head>
+<body class="bg-background text-on-background">
+<!-- SideNavBar (Shared Component) -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-white border-r border-slate-200 flex flex-col py-6 z-50 font-['Space_Grotesk'] text-sm antialiased">
+<div class="px-6 mb-10">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 bg-primary rounded flex items-center justify-center">
+<span class="material-symbols-outlined text-white" data-icon="gavel" style="font-variation-settings: 'FILL' 1;">gavel</span>
+</div>
+<div>
+<h1 class="text-xl font-black text-emerald-600">GAVEL OS</h1>
+<p class="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Enterprise Security</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center px-6 py-3 text-slate-500 hover:bg-slate-50 transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center px-6 py-3 text-slate-500 hover:bg-slate-50 transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="history_edu">history_edu</span>
+                Audit Ledger
+            </a>
+<a class="flex items-center px-6 py-3 text-slate-500 hover:bg-slate-50 transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="policy">policy</span>
+                Policies
+            </a>
+<a class="flex items-center px-6 py-3 bg-emerald-50 text-emerald-600 border-r-4 border-emerald-600 font-bold transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="edit_note">edit_note</span>
+                Editor
+            </a>
+<a class="flex items-center px-6 py-3 text-slate-500 hover:bg-slate-50 transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="monitoring">monitoring</span>
+                Live Monitor
+            </a>
+</nav>
+<div class="mt-auto px-6 space-y-1">
+<a class="flex items-center py-2 text-slate-500 hover:text-slate-900 transition-colors" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="help">help</span>
+                Support
+            </a>
+<a class="flex items-center py-2 text-slate-500 hover:text-slate-900 transition-colors" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="person">person</span>
+                Account
+            </a>
+</div>
+</aside>
+<!-- TopAppBar (Shared Component) -->
+<header class="flex justify-between items-center h-16 px-8 ml-64 w-[calc(100%-16rem)] bg-white border-b border-slate-200 fixed top-0 z-40">
+<div class="flex items-center gap-4">
+<div class="flex flex-col">
+<h2 class="text-lg font-bold text-slate-900 font-['Space_Grotesk'] tracking-tight">network-policy-prod</h2>
+<p class="text-xs text-slate-500">Validate and deploy</p>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<span class="text-xs font-mono-data text-emerald-600 font-semibold px-2 py-1 bg-emerald-50 rounded">System Status: Online</span>
+<div class="flex items-center gap-4 text-slate-500">
+<button class="hover:bg-slate-50 p-2 rounded transition-colors active:scale-95"><span class="material-symbols-outlined" data-icon="notifications">notifications</span></button>
+<button class="hover:bg-slate-50 p-2 rounded transition-colors active:scale-95"><span class="material-symbols-outlined" data-icon="settings">settings</span></button>
+<button class="hover:bg-slate-50 p-2 rounded transition-colors active:scale-95"><span class="material-symbols-outlined" data-icon="account_circle">account_circle</span></button>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-16 h-screen overflow-hidden flex flex-col bg-surface">
+<!-- Toolbar Actions -->
+<div class="h-14 border-b border-slate-200 px-6 flex items-center justify-between bg-white">
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 px-4 py-2 border border-outline-variant text-on-surface hover:bg-slate-50 rounded transition-all font-title-sm text-sm">
+<span class="material-symbols-outlined text-sm" data-icon="save">save</span>
+                    Save
+                </button>
+<button class="flex items-center gap-2 px-4 py-2 border border-emerald-600 text-emerald-600 hover:bg-emerald-50 rounded transition-all font-title-sm text-sm">
+<span class="material-symbols-outlined text-sm" data-icon="rule">rule</span>
+                    Validate
+                </button>
+</div>
+<button class="flex items-center gap-2 px-6 py-2 bg-primary text-on-primary hover:bg-primary-container rounded transition-all font-title-sm text-sm shadow-sm">
+<span class="material-symbols-outlined text-sm" data-icon="rocket_launch" style="font-variation-settings: 'FILL' 1;">rocket_launch</span>
+                Deploy
+            </button>
+</div>
+<!-- Split Editor Layout -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Left Side: Code Editor -->
+<div class="w-2/3 border-r border-slate-200 flex flex-col bg-white">
+<div class="flex items-center px-4 py-2 bg-slate-50 border-b border-slate-200">
+<span class="text-[10px] font-bold font-label-caps text-slate-500 uppercase tracking-widest">Rego Policy Editor</span>
+<div class="ml-auto flex gap-4">
+<span class="text-xs text-slate-400 font-mono-data">Line 24, Col 12</span>
+</div>
+</div>
+<div class="flex-1 p-6 font-mono-data text-body-md overflow-auto editor-bg">
+<pre class="leading-relaxed"><span class="token-comment"># GAVEL OS Production Policy</span>
+<span class="token-keyword">package</span> gavel.network.production
+
+<span class="token-keyword">default</span> allow = <span class="token-boolean">false</span>
+
+<span class="token-comment"># Enforce HTTPS for all external traffic</span>
+<span class="token-keyword">allow</span> {
+    input.request.protocol == <span class="token-string">"https"</span>
+    input.request.origin == <span class="token-string">"external"</span>
+    is_trusted_ca(input.request.certificate)
+}
+
+<span class="token-keyword">is_trusted_ca</span>(cert) {
+    ca_list := [<span class="token-string">"GAVEL_ROOT_01"</span>, <span class="token-string">"SYSTEM_AUTH_X"</span>]
+    cert.issuer == ca_list[_]
+}
+
+<span class="token-comment"># Deny deprecated cipher suites</span>
+<span class="token-keyword">deny</span>[msg] {
+    ciphers := [<span class="token-string">"TLS_RSA_WITH_AES_128_CBC_SHA"</span>, <span class="token-string">"TLS_3DES"</span>]
+    input.request.cipher == ciphers[_]
+    msg := sprintf(<span class="token-string">"Insecure cipher detected: %v"</span>, [input.request.cipher])
+}
+</pre>
+</div>
+</div>
+<!-- Right Side: Validation & Impact Panel -->
+<div class="w-1/3 flex flex-col bg-slate-50">
+<div class="p-6 space-y-gutter overflow-y-auto">
+<!-- Risk Level Widget -->
+<div class="bg-white p-6 border border-outline-variant rounded-lg">
+<div class="flex justify-between items-start mb-4">
+<h3 class="text-headline-md font-headline-md text-slate-900">Risk Assessment</h3>
+<span class="material-symbols-outlined text-emerald-500" data-icon="verified_user">verified_user</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="text-display-lg font-display-lg text-emerald-600">Low</div>
+<div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+<div class="w-1/4 h-full bg-emerald-500"></div>
+</div>
+</div>
+<p class="mt-4 text-body-sm text-slate-500">This policy change adheres to the "Zero Trust" baseline. No regression detected in current environment sims.</p>
+</div>
+<!-- Coverage Stats Grid -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-white p-4 border border-outline-variant rounded-lg">
+<p class="text-label-caps text-slate-400 mb-1">TEST COVERAGE</p>
+<p class="text-title-sm font-title-sm text-slate-900">94.2%</p>
+</div>
+<div class="bg-white p-4 border border-outline-variant rounded-lg">
+<p class="text-label-caps text-slate-400 mb-1">ASSERTIONS</p>
+<p class="text-title-sm font-title-sm text-slate-900">12 Passed</p>
+</div>
+</div>
+<!-- Impact Analysis Timeline -->
+<div class="bg-white p-6 border border-outline-variant rounded-lg">
+<h3 class="text-title-sm font-title-sm text-slate-900 mb-4">Impact Timeline</h3>
+<div class="space-y-6 relative">
+<!-- Vertical line -->
+<div class="absolute left-[11px] top-2 bottom-2 w-[2px] bg-slate-100"></div>
+<div class="flex gap-4 relative">
+<div class="w-6 h-6 rounded-full bg-emerald-100 border-2 border-white ring-1 ring-emerald-500 flex items-center justify-center z-10">
+<div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+</div>
+<div>
+<p class="text-body-sm font-semibold text-slate-900">Syntax Check</p>
+<p class="text-xs text-slate-500">Valid Rego structure detected.</p>
+</div>
+</div>
+<div class="flex gap-4 relative">
+<div class="w-6 h-6 rounded-full bg-emerald-100 border-2 border-white ring-1 ring-emerald-500 flex items-center justify-center z-10">
+<div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+</div>
+<div>
+<p class="text-body-sm font-semibold text-slate-900">Simulation Run</p>
+<p class="text-xs text-slate-500">512 edge cases processed in 1.2s.</p>
+</div>
+</div>
+<div class="flex gap-4 relative opacity-50">
+<div class="w-6 h-6 rounded-full bg-slate-200 border-2 border-white ring-1 ring-slate-300 flex items-center justify-center z-10">
+</div>
+<div>
+<p class="text-body-sm font-semibold text-slate-900">Peer Review</p>
+<p class="text-xs text-slate-500">Pending approval from SecOps lead.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Environment Status -->
+<div class="bg-primary-container p-6 rounded-lg text-on-primary-container">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined" data-icon="info">info</span>
+<h4 class="font-bold font-title-sm">Deployment Ready</h4>
+</div>
+<p class="text-xs opacity-90 leading-relaxed">Changes will be staged to 'us-east-cluster-01' immediately upon deployment.</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>
