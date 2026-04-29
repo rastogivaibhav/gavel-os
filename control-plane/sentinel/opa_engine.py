@@ -46,15 +46,27 @@ class OPAValidationEngine:
             return False
 
     def check_routing_allowance(
-        self, identity_context: Dict[str, Any], target_endpoint: Dict[str, Any]
+        self,
+        identity_context: Dict[str, Any],
+        target_endpoint: Dict[str, Any],
+        tenant_id: str | None = None,
     ) -> Tuple[bool, str]:
         """
         Evaluate if the current identity is authorized to invoke the target endpoint.
+
+        Args:
+            identity_context: Identity attributes (user, roles, etc.)
+            target_endpoint: Target resource (path, method)
+            tenant_id: Optional tenant ID for multi-tenant policy evaluation
         """
         input_data = {
             "identity": identity_context,
             "resource": target_endpoint,
         }
+
+        # Include tenant_id in policy input if provided
+        if tenant_id:
+            input_data["tenant_id"] = tenant_id
 
         if not self.is_available():
             return False, "Internal Security Error: Policy Engine Unavailable"
@@ -74,7 +86,13 @@ class OPAValidationEngine:
         return False, "Access Denied by PBAC Rego Rules"
 
     def evaluate_runtime_policy(
-        self, action: str, method: str, host_id: str, runtime_os: str, agent_id: str
+        self,
+        action: str,
+        method: str,
+        host_id: str,
+        runtime_os: str,
+        agent_id: str,
+        tenant_id: str | None = None,
     ) -> Tuple[bool, str]:
         """
         Evaluate network-level runtime policy (sentinel.runtime.policy).
@@ -86,6 +104,7 @@ class OPAValidationEngine:
             host_id: enforcer host identifier
             runtime_os: linux | windows | macos
             agent_id: agent process name
+            tenant_id: optional tenant ID for multi-tenant policies
         """
         input_data = {
             "action": action,
@@ -94,6 +113,10 @@ class OPAValidationEngine:
             "runtime_os": runtime_os,
             "agent_id": agent_id,
         }
+
+        # Include tenant_id in policy input if provided
+        if tenant_id:
+            input_data["tenant_id"] = tenant_id
 
         if not self.is_available():
             return False, "Policy Engine Unavailable (fail-closed)"
