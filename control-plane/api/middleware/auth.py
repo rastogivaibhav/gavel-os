@@ -15,7 +15,8 @@ from api.runtime_contract import MACHINE_KEY_ENV, MACHINE_KEY_HEADER
 
 logger = logging.getLogger("sentinel.auth")
 
-_PUBLIC_PATHS = {"/", "/health", "/readyz", "/docs", "/redoc", "/openapi.json", "/auth/token", "/auth/jwks", "/.well-known/jwks.json"}
+_PUBLIC_PATHS = {"/", "/health", "/readyz", "/docs", "/redoc", "/openapi.json", "/auth/token", "/auth/jwks", "/.well-known/jwks.json", "/audit-ledger", "/policies", "/policy-editor", "/live-monitor"}
+_PUBLIC_PREFIXES = {"/static/"}
 
 # ── Startup guard: ALLOW_INSECURE_DEV_AUTH must never be enabled outside dev ──
 _insecure_dev_auth_raw = os.getenv("ALLOW_INSECURE_DEV_AUTH", "false").lower()
@@ -47,12 +48,8 @@ class AuthMiddleware:
         # _env and _insecure_dev_auth_raw are module-level; startup guard already
         # rejected the combination ENV!=development + ALLOW_INSECURE_DEV_AUTH=true.
         insecure_dev_auth = _insecure_dev_auth_raw == "true" and _env == "development"
-        if (
-            insecure_dev_auth
-            or path in _PUBLIC_PATHS
-            or path == "/ui"
-            or path.startswith("/ui/")
-        ):
+        is_public_path = path in _PUBLIC_PATHS or any(path.startswith(prefix) for prefix in _PUBLIC_PREFIXES)
+        if insecure_dev_auth or is_public_path:
             # In dev-bypass mode, stamp gavel_auth_mode so require_machine_auth
             # and any other scope-state consumers don't 401 on internal endpoints.
             if insecure_dev_auth:
