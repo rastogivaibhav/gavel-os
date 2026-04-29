@@ -189,7 +189,19 @@ curl -s -X POST http://localhost:8000/external/validate \
   -d '{"action":"data.delete","method":"EXECUTE","required_clearance":1}' | jq .
 ```
 
-### 4. Run the Linux enforcer
+### 4. Access the Control Plane Dashboard
+
+Open your browser to **`http://localhost:8000`** to access the web-based control plane UI:
+
+- **Dashboard** — System health, component status, recent events
+- **Audit Ledger** — Forensic analysis with SHA-256 chain verification
+- **Policies** — Deployed policy inventory and versions
+- **Policy Editor** — Interactive REGO editor with validation & testing
+- **Live Monitor** — Real-time decision stream via WebSocket
+
+Full UI documentation: [docs/UI_SETUP.md](docs/UI_SETUP.md)
+
+### 5. Run the Linux enforcer
 
 ```bash
 cd enforcer
@@ -204,7 +216,7 @@ export GAVEL_MACHINE_KEY=<your-machine-key>
 sudo ./gavel-enforcer
 ```
 
-### 5. Run the Windows enforcer
+### 6. Run the Windows enforcer
 
 ```powershell
 cd enforcer
