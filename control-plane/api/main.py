@@ -42,6 +42,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from api.routes import telemetry as telemetry_router
 from api.routes import ui as ui_router
+from api.routes import websocket as ws_router
 from api.middleware.auth import AuthMiddleware
 from api.middleware.security_headers import SecurityHeadersMiddleware
 from api.runtime_contract import HOST_ID_HEADER, MACHINE_KEY_ENV, MACHINE_KEY_HEADER
@@ -287,6 +288,7 @@ except ImportError:
 
 # ─── UI Routes ────────────────────────────────────────────────────────────────
 app.include_router(ui_router.router)
+app.include_router(ws_router.router)
 
 # ─── Static Files ──────────────────────────────────────────────────────────────
 static_dir = Path(__file__).parent.parent / "static"
