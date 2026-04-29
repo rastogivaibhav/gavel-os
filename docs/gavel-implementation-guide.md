@@ -1252,6 +1252,128 @@ When extending Gavel, verify:
 
 ---
 
+## Fixed in Latest Commit
+
+The following shortcomings have been **resolved**:
+
+### ✅ SRP VerdictEngine Now Integrated
+
+**Previously:** Wired to app state but never called  
+**Now:** Available via `POST /external/tool/verdict`
+
+```python
+# New endpoint
+POST /external/tool/verdict
+Authorization: X-Gavel-Machine-Key: <key>
+
+Request:
+{
+    "agent_id": "claude-code-1",
+    "tool_call_id": "tc_abc123",
+    "api_ref": "payments.api",
+    "operation": "transfer",
+    "environment": "prod",
+    "parameters": {"amount": 50000, "recipient": "acct_xyz"},
+    "tenant_id": "default",
+    "replay_nonce": "nonce_1234567890123456"
+}
+
+Response:
+{
+    "verdict": "ALLOW|ESCALATE|DENY",
+    "reason_code": "TOOL_PROPOSAL_ALLOW",
+    "reasons": [{
+        "code": "APPROVED",
+        "message": "Tool proposal meets policy requirements",
+        "details": {}
+    }],
+    "escalation_ticket": "ESC-tc_abc123" (if ESCALATE),
+    "metadata": {...}
+}
+```
+
+**Implementation:**
+- Added `ToolProposalRequest` model
+- Integrated with `VerdictEngine.evaluate()`
+- All verdicts (ALLOW/ESCALATE/DENY) logged to audit ledger
+- Broadcast to telemetry WebSocket
+
+---
+
+### ✅ runtime.rego Policy Now Queried
+
+**Previously:** Existed but was never called  
+**Now:** Available via `POST /external/network/policy`
+
+```python
+# New endpoint
+POST /external/network/policy
+Authorization: X-Gavel-Machine-Key: <key>
+
+Request:
+{
+    "action": "93.184.216.34",  # or "api.example.com"
+    "method": "CONNECT",
+    "host_id": "host-abc123",
+    "runtime_os": "linux",
+    "agent_id": "claude-code-1"
+}
+
+Response:
+{
+    "is_allowed": true,
+    "reason": "Authorized by Runtime Policy (ALLOW)",
+    "verdict": "ALLOW"
+}
+```
+
+**Implementation:**
+- Added `evaluate_runtime_policy()` method to OPA engine
+- Queries `sentinel.runtime.policy/allow` OPA package
+- Uses `runtime.rego` rules for network-level decisions
+- Logs all verdicts to audit ledger
+
+---
+
+### ✅ ALLOW Decisions Now Logged to Audit Ledger
+
+**Previously:** Only DENY decisions logged  
+**Now:** Both ALLOW and DENY logged
+
+**Changes:**
+- `evaluate_runtime_action()` endpoint now logs all decisions
+- Audit outcome: "SUCCESS" for ALLOW, "FAILURE" for DENY
+- Enables complete decision audit trail
+- Improves compliance audit capability
+
+**Query example:**
+```sql
+-- Find all policy decisions (ALLOW and DENY)
+SELECT
+    id,
+    created_at,
+    event_json->>'action' as action,
+    event_json->>'outcome' as outcome
+FROM audit_ledger
+WHERE event_json->>'recipe_id' = 'runtime-policy-validation'
+  AND created_at > now() - interval '24 hours'
+ORDER BY created_at DESC;
+```
+
+---
+
+### ✅ Audit Logging Comprehensive
+
+**All decision points now log:**
+- `/external/validate` — authorization decisions
+- `/external/runtime/validate` — runtime policy decisions  
+- `/external/network/policy` — network action decisions
+- `/external/tool/verdict` — SRP tool proposal verdicts
+
+**Outcome values:** SUCCESS (ALLOW), FAILURE (DENY)
+
+---
+
 ## Known Limitations & Workarounds
 
 ### 1. eBPF Hook Limitations (Linux)
@@ -1278,42 +1400,7 @@ if blocklist[dstIP] {
 
 ---
 
-### 2. SRP Verdict Engine (Dead Code, v1.0)
-
-**Issue:** SRP VerdictEngine is wired but never called  
-**Impact:** YAML policy rules are not evaluated  
-**Workaround:** Use OPA/Rego policies instead
-
-```rego
-// Use Rego for all policy logic (workaround)
-package sentinel.custom
-
-allow if {
-    input.operation not in ["delete", "drop", "truncate"]
-}
-```
-
----
-
-### 3. Audit Ledger: ALLOW Decisions Not Logged
-
-**Issue:** Only DENY decisions logged to immutable ledger  
-**Impact:** Cannot audit routine allowances, only violations  
-**Workaround:** Use `runtime_events` table for ALLOW decisions
-
-```python
-# Log ALLOW decisions to runtime_events (not immutable ledger)
-await runtime_events.insert({
-    "event_type": "policy_decision",
-    "verdict": "ALLOW",
-    "agent_id": agent_id,
-    "created_at": datetime.utcnow()
-})
-```
-
----
-
-### 4. Windows WFP Rule Explosion
+### 2. Windows WFP Rule Explosion
 
 **Issue:** Each blocked IP/process creates a WFP rule; cleanup on reboot slow  
 **Impact:** Rule table bloat if enforcer is restarted many times  
@@ -1330,7 +1417,7 @@ Add-NetIPsecRule -DisplayGroup $groupName -DisplayName "..." ...
 
 ---
 
-### 5. Chain Verification: JSON Re-serialization
+### 3. Chain Verification: JSON Re-serialization
 
 **Issue:** PostgreSQL may reorder JSONB keys during storage  
 **Impact:** Chain verification could show false negatives  
@@ -1357,7 +1444,7 @@ def verify_chain_safe(event_json_db, original_hash):
 
 ---
 
-### 6. Linux Enforcer Audit-Only Fallback
+### 4. Linux Enforcer Audit-Only Fallback
 
 **Issue:** If eBPF attach fails, enforcer falls back to audit-only (not fail-closed)  
 **Impact:** No enforcement if kernel eBPF is unavailable  
@@ -1385,22 +1472,23 @@ if err := enforcer.ValidateSetup(); err != nil {
 **Fully Production-Ready:**
 - ✅ REST API contract and endpoints
 - ✅ JWT/JWKS authentication
-- ✅ PostgreSQL audit ledger (with caveat on ALLOW events)
-- ✅ OPA/Rego policy engine
+- ✅ PostgreSQL audit ledger (logs all decisions: ALLOW + DENY)
+- ✅ OPA/Rego policy engine (both authz.rego and runtime.rego)
 - ✅ Docker Compose deployment
 - ✅ Kubernetes DaemonSet + Deployment
 - ✅ Windows ETW + WFP enforcement
 - ✅ Linux eBPF cgroup socket filtering
+- ✅ SRP VerdictEngine (integrated via `/external/tool/verdict`)
+- ✅ Network policy evaluation (runtime.rego via `/external/network/policy`)
+- ✅ Complete audit logging (ALLOW + DENY decisions)
 
 **Partially Implemented:**
-- ⚠️ SRP Verdict Engine (exists, not called)
-- ⚠️ runtime.rego policies (exist, not queried)
-- ⚠️ macOS enforcement (audit-only, no blocking)
+- ⚠️ macOS enforcement (audit-only, no blocking; System Extensions planned for v1.1)
+- ⚠️ Escalation workflows (basic structure via `/tool/verdict`, full approval chains pending)
 
 **Not Ready:**
-- ❌ Escalation workflows
-- ❌ Multi-tenancy (single tenant hardcoded)
-- ❌ Complex approval chains
+- ❌ Multi-tenancy (single tenant hardcoded; tenant_id is respected but hard-coded in auth)
+- ❌ Complex approval chains and notifications
 - ❌ Real-time stream processing
 
 ---
