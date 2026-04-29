@@ -1,4 +1,4 @@
-FROM python:3.11-slim AS base
+FROM python:3.13-slim AS base
 
 WORKDIR /app
 
@@ -15,10 +15,12 @@ COPY . .
 
 # Non-root user — create keys directory with correct ownership before switching
 RUN useradd -r -u 1001 -g root gavel && \
-    mkdir -p /app/auth/keys && \
+    mkdir -p /tmp/gavel-keys && \
+    mkdir -p /tmp/gavel-grpc-dev && \
     chown -R gavel:root /app
 USER gavel
 
 EXPOSE 8000 50051
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Use the new main.py from Phase 1-3 implementation
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

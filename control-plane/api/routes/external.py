@@ -546,6 +546,46 @@ async def evaluate_tool_proposal(request: Request, payload: ToolProposalRequest)
             )
         )
 
+        # Handle ESCALATE verdict - create escalation record and send notification
+        escalation_ticket = None
+        if verdict_str == "ESCALATE":
+            try:
+                escalation_service = getattr(request.app.state, "escalation_service", None)
+                notification_service = getattr(request.app.state, "notification_service", None)
+
+                if escalation_service:
+                    # Create escalation record in database
+                    escalation_ticket = await escalation_service.create_escalation(
+                        tenant_id=payload.tenant_id,
+                        tool_call_id=payload.tool_call_id,
+                        agent_id=payload.agent_id,
+                        api_ref=payload.api_ref,
+                        operation=payload.operation,
+                        environment=payload.environment,
+                        parameters=payload.parameters,
+                        risk_level="high" if "payment" in payload.api_ref.lower() else "medium",
+                    )
+                    logger.info(f"Created escalation {escalation_ticket} for {payload.tool_call_id}")
+
+                    # Send approval required notification
+                    if notification_service:
+                        from datetime import timedelta
+                        deadline = datetime.now(timezone.utc) + timedelta(hours=24)
+                        await notification_service.send_approval_required(
+                            tenant_id=payload.tenant_id,
+                            escalation_id=f"esc_{payload.tool_call_id[:16]}",
+                            ticket_number=escalation_ticket,
+                            tool_call_id=payload.tool_call_id,
+                            operation=payload.operation,
+                            agent_id=payload.agent_id,
+                            deadline=deadline,
+                            parameters=payload.parameters,
+                        )
+                        logger.info(f"Sent approval notification for {escalation_ticket}")
+            except Exception as exc:
+                logger.error(f"Failed to create escalation: {exc}", exc_info=True)
+                # Don't fail the request if escalation creation fails, just log it
+
         # Format response
         return {
             "verdict": verdict_str,
@@ -558,9 +598,7 @@ async def evaluate_tool_proposal(request: Request, payload: ToolProposalRequest)
                 }
                 for reason in verdict.reasons
             ],
-            "escalation_ticket": (
-                f"ESC-{payload.tool_call_id}" if verdict_str == "ESCALATE" else None
-            ),
+            "escalation_ticket": escalation_ticket,
             "metadata": {
                 "tool_call_id": payload.tool_call_id,
                 "evaluated_at": datetime.now(timezone.utc).isoformat(),

@@ -1,7 +1,7 @@
 """Escalation workflow endpoints."""
 
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 
 from api.dependencies import get_tenant_context
 from models.escalation import EscalationApprove, EscalationStatus
@@ -57,6 +57,7 @@ async def get_escalation_status(
 async def approve_escalation(
     escalation_id: str,
     decision: EscalationApprove,
+    request: Request,
     tenant_context: TenantContext = Depends(get_tenant_context),
     service: EscalationService = Depends(get_escalation_service),
 ) -> dict:
@@ -80,6 +81,44 @@ async def approve_escalation(
             status_code=400,
             detail=message
         )
+
+    # Send notification about approval/denial
+    notification_service = getattr(request.app.state, "notification_service", None)
+    if notification_service and success:
+        try:
+            # Get escalation details to include in notification
+            esc_status = await service.get_escalation_status(
+                tenant_context.tenant_id,
+                escalation_id
+            )
+
+            if esc_status:
+                if decision.decision == "approved":
+                    await notification_service.send_approval_granted(
+                        tenant_id=tenant_context.tenant_id,
+                        escalation_id=escalation_id,
+                        ticket_number=esc_status.get("ticket_number", "UNKNOWN"),
+                        tool_call_id=esc_status.get("ticket_number", "").split("-")[1] if "-" in esc_status.get("ticket_number", "") else "UNKNOWN",
+                        operation="unknown",
+                        agent_id="unknown",
+                        approver_id=tenant_context.user_id or "unknown",
+                        reason=decision.reason,
+                    )
+                else:
+                    await notification_service.send_approval_denied(
+                        tenant_id=tenant_context.tenant_id,
+                        escalation_id=escalation_id,
+                        ticket_number=esc_status.get("ticket_number", "UNKNOWN"),
+                        tool_call_id=esc_status.get("ticket_number", "").split("-")[1] if "-" in esc_status.get("ticket_number", "") else "UNKNOWN",
+                        operation="unknown",
+                        agent_id="unknown",
+                        approver_id=tenant_context.user_id or "unknown",
+                        reason=decision.reason,
+                    )
+                logger.info(f"Sent {decision.decision} notification for {escalation_id}")
+        except Exception as exc:
+            logger.error(f"Failed to send approval notification: {exc}")
+            # Don't fail the request if notification fails
 
     return {
         "escalation_id": escalation_id,

@@ -6,7 +6,7 @@ from typing import Callable
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from logging.structured_logger import get_logger, set_request_context, clear_request_context
+from gavel_logging.structured_logger import get_logger, set_request_context, clear_request_context
 
 logger = get_logger("sentinel.api")
 

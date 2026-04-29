@@ -1,0 +1,37 @@
+# Test runner container - runs tests in Linux environment
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY control-plane/requirements.txt requirements.txt
+COPY control-plane/requirements-dev.txt requirements-dev.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-dev.txt && \
+    pip install --no-cache-dir pytest pytest-asyncio httpx
+
+# Copy code
+COPY control-plane /app/control-plane
+COPY tests /app/tests
+COPY pytest.ini /app/pytest.ini
+
+# Verify environment
+RUN echo "=== Test Environment ===" && \
+    python --version && \
+    pytest --version && \
+    echo "Python path: $(which python)" && \
+    echo "=== Package Versions ===" && \
+    pip list | grep -E "pytest|asyncio|httpx"
+
+# Default command - can be overridden
+CMD ["pytest", "tests/", "-v", "--tb=short"]
