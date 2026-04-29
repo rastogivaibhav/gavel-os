@@ -69,6 +69,28 @@ class ValidateRequest(BaseModel):
     required_clearance: int = 1
 
 
+class NetworkPolicyRequest(BaseModel):
+    """Request for runtime network action policy evaluation."""
+    action: str  # Target hostname or IP
+    method: str = "CONNECT"  # CONNECT | GET | POST | EXECUTE
+    host_id: str
+    runtime_os: str  # linux | windows | macos
+    agent_id: str
+
+
+class ToolProposalRequest(BaseModel):
+    """Request for SRP VerdictEngine tool call proposal evaluation."""
+    agent_id: str
+    tool_call_id: str
+    api_ref: str  # e.g., "payments.api"
+    operation: str  # e.g., "transfer", "delete", "write"
+    environment: str  # dev, staging, prod
+    parameters: dict
+    tenant_id: str = "default"
+    user_id: Optional[str] = None
+    replay_nonce: str = ""  # 16+ bytes for replay protection
+
+
 def _control_plane_status(request: Request) -> str:
     return control_plane_status_from_app(request.app)
 
@@ -269,16 +291,18 @@ async def validate_runtime_action(request: Request, payload: MachineValidateRequ
         headers={key.lower(): value for key, value in request.headers.items()},
     )
 
-    if not decision["is_allowed"]:
-        await _append_audit_event(
-            request,
-            recipe_id="runtime-policy-validation",
-            step_id="validate-connection",
-            actor=payload.host_id,
-            action=payload.action,
-            target_system=payload.target_tenant_id,
-            outcome="FAILURE",
-        )
+    # Always log policy decisions (both ALLOW and DENY) to audit ledger
+    audit_outcome = "SUCCESS" if decision["is_allowed"] else "FAILURE"
+    await _append_audit_event(
+        request,
+        recipe_id="runtime-policy-validation",
+        step_id="validate-connection",
+        actor=payload.host_id,
+        action=payload.action,
+        target_system=payload.target_tenant_id,
+        outcome=audit_outcome,
+        payload_hash=f"policy-decision:{decision['reason_code']}",
+    )
 
     await _broadcast_runtime_event(
         RuntimeEventEnvelope(
@@ -295,6 +319,7 @@ async def validate_runtime_action(request: Request, payload: MachineValidateRequ
                 "target_kind": payload.method,
                 "runtime_mode": payload.runtime_mode.value,
                 "enforcement_capable": payload.enforcement_capable,
+                "decision_reason": decision.get("reason", ""),
             },
         )
     )
@@ -333,3 +358,232 @@ async def get_runtime_policy(request: Request, payload: MachinePolicyRequest):
         )
     )
     return policy
+
+
+@router.post("/network/policy")
+@_rate_limit(LIMIT_VALIDATE)
+async def evaluate_network_policy(request: Request, payload: NetworkPolicyRequest):
+    """
+    Evaluate runtime network action policy (sentinel.runtime.policy).
+
+    Used by enforcers to validate network connections against centralized
+    runtime policies. This queries the sentinel.runtime.policy OPA package.
+
+    Request:
+        action: target hostname or IP
+        method: CONNECT | GET | POST | EXECUTE
+        host_id: enforcer host identifier
+        runtime_os: linux | windows | macos
+        agent_id: agent process name
+
+    Response:
+        {
+            "is_allowed": bool,
+            "reason": string,
+            "verdict": "ALLOW" | "DENY"
+        }
+    """
+    require_machine_auth(request)
+
+    is_allowed, reason = query_route.opa_engine.evaluate_runtime_policy(
+        action=payload.action,
+        method=payload.method,
+        host_id=payload.host_id,
+        runtime_os=payload.runtime_os,
+        agent_id=payload.agent_id,
+    )
+
+    # Log both ALLOW and DENY to audit ledger
+    audit_outcome = "SUCCESS" if is_allowed else "FAILURE"
+    await _append_audit_event(
+        request,
+        recipe_id="runtime-network-policy",
+        step_id="network-validation",
+        actor=payload.host_id,
+        action=f"network.{payload.method.lower()}",
+        target_system=payload.action,
+        outcome=audit_outcome,
+        payload_hash=f"network-policy:{payload.action}",
+    )
+
+    await _broadcast_runtime_event(
+        RuntimeEventEnvelope(
+            event_type=RuntimeEventType.POLICY_VERDICT,
+            host_id=payload.host_id,
+            agent_id=payload.agent_id,
+            target=payload.action,
+            verdict=RuntimeVerdict.ALLOW if is_allowed else RuntimeVerdict.DENY,
+            reason_code="NETWORK_ALLOW" if is_allowed else "NETWORK_DENY",
+            metadata={
+                "policy_engine": "opa",
+                "policy_package": "sentinel.runtime.policy",
+                "method": payload.method,
+                "runtime_os": payload.runtime_os,
+                "reason": reason,
+            },
+        )
+    )
+
+    return {
+        "is_allowed": is_allowed,
+        "reason": reason,
+        "verdict": "ALLOW" if is_allowed else "DENY",
+    }
+
+
+@router.post("/tool/verdict")
+@_rate_limit(LIMIT_VALIDATE)
+async def evaluate_tool_proposal(request: Request, payload: ToolProposalRequest):
+    """
+    Evaluate a tool call proposal using SRP VerdictEngine.
+
+    Deterministic evaluation of structured tool proposals against
+    governance policies. Returns ALLOW, ESCALATE, or DENY.
+
+    Request:
+        agent_id: calling agent identifier
+        tool_call_id: unique identifier for this proposal
+        api_ref: API reference (e.g., "payments.api")
+        operation: operation type (transfer, delete, write, etc.)
+        environment: dev | staging | prod
+        parameters: tool parameters as dict
+        tenant_id: tenant context
+        user_id: optional user context
+        replay_nonce: replay attack protection (16+ bytes)
+
+    Response:
+        {
+            "verdict": "ALLOW" | "ESCALATE" | "DENY",
+            "reason_code": string,
+            "reasons": [{"code": string, "message": string, ...}],
+            "escalation_ticket": string (if ESCALATE),
+            "metadata": dict
+        }
+    """
+    require_machine_auth(request)
+
+    verdict_engine = getattr(request.app.state, "verdict_engine", None)
+    if not verdict_engine:
+        logger.error("SRP VerdictEngine not initialized")
+        await _append_audit_event(
+            request,
+            recipe_id="tool-proposal-verdict",
+            step_id="verdict-evaluation",
+            actor=payload.agent_id,
+            action=f"tool:{payload.operation}",
+            target_system=payload.api_ref,
+            outcome="FAILURE",
+            payload_hash="verdict-engine-unavailable",
+        )
+        return {
+            "verdict": "DENY",
+            "reason_code": "VERDICT_ENGINE_UNAVAILABLE",
+            "reasons": [{"code": "ENGINE_ERROR", "message": "Verdict engine not available"}],
+            "escalation_ticket": None,
+            "metadata": {"error": "verdict_engine_unavailable"},
+        }
+
+    try:
+        # Build proposal for SRP evaluation
+        from srp.models import Proposal, ToolCall
+
+        tool_call = ToolCall(
+            tool_name="external-tool",
+            api_ref=payload.api_ref,
+            operation=payload.operation,
+            parameters=payload.parameters,
+        )
+
+        proposal = Proposal(
+            agent_id=payload.agent_id,
+            tool_call=tool_call,
+            environment=payload.environment,
+            replay_nonce=payload.replay_nonce or "default-nonce",
+            tenant_id=payload.tenant_id,
+        )
+
+        # Evaluate against policies
+        verdict = verdict_engine.evaluate(proposal)
+
+        # Determine outcome for audit
+        verdict_str = verdict.verdict.value
+        audit_outcome = "SUCCESS" if verdict_str == "ALLOW" else "FAILURE"
+
+        # Log to audit ledger (all verdicts)
+        await _append_audit_event(
+            request,
+            recipe_id="tool-proposal-verdict",
+            step_id="verdict-evaluation",
+            actor=payload.agent_id,
+            action=f"tool:{payload.operation}",
+            target_system=payload.api_ref,
+            outcome=audit_outcome,
+            payload_hash=f"proposal:{payload.tool_call_id}",
+        )
+
+        # Broadcast verdict event
+        await _broadcast_runtime_event(
+            RuntimeEventEnvelope(
+                event_type=RuntimeEventType.POLICY_VERDICT,
+                host_id=request.client.host if request.client else "unknown",
+                agent_id=payload.agent_id,
+                target=payload.api_ref,
+                verdict=(
+                    RuntimeVerdict.ALLOW
+                    if verdict_str == "ALLOW"
+                    else RuntimeVerdict.ESCALATE
+                    if verdict_str == "ESCALATE"
+                    else RuntimeVerdict.DENY
+                ),
+                reason_code=f"TOOL_PROPOSAL_{verdict_str}",
+                metadata={
+                    "tool_call_id": payload.tool_call_id,
+                    "api_ref": payload.api_ref,
+                    "operation": payload.operation,
+                    "environment": payload.environment,
+                    "num_reasons": len(verdict.reasons),
+                },
+            )
+        )
+
+        # Format response
+        return {
+            "verdict": verdict_str,
+            "reason_code": f"TOOL_PROPOSAL_{verdict_str}",
+            "reasons": [
+                {
+                    "code": reason.code,
+                    "message": reason.message,
+                    "details": reason.details,
+                }
+                for reason in verdict.reasons
+            ],
+            "escalation_ticket": (
+                f"ESC-{payload.tool_call_id}" if verdict_str == "ESCALATE" else None
+            ),
+            "metadata": {
+                "tool_call_id": payload.tool_call_id,
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "engine": "srp",
+            },
+        }
+
+    except Exception as exc:
+        logger.exception(f"Tool proposal verdict evaluation failed: {exc}")
+        await _append_audit_event(
+            request,
+            recipe_id="tool-proposal-verdict",
+            step_id="verdict-evaluation",
+            actor=payload.agent_id,
+            action=f"tool:{payload.operation}",
+            target_system=payload.api_ref,
+            outcome="FAILURE",
+            payload_hash="verdict-evaluation-error",
+        )
+        return {
+            "verdict": "DENY",
+            "reason_code": "EVALUATION_ERROR",
+            "reasons": [{"code": "ERROR", "message": str(exc), "details": {}}],
+            "escalation_ticket": None,
+            "metadata": {"error": "evaluation_failed"},
+        }

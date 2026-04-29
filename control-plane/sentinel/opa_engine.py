@@ -72,3 +72,44 @@ class OPAValidationEngine:
         if is_allowed:
             return True, "Authorized by OPA"
         return False, "Access Denied by PBAC Rego Rules"
+
+    def evaluate_runtime_policy(
+        self, action: str, method: str, host_id: str, runtime_os: str, agent_id: str
+    ) -> Tuple[bool, str]:
+        """
+        Evaluate network-level runtime policy (sentinel.runtime.policy).
+
+        Used for enforcer-level network action decisions.
+        Input shape:
+            action: target hostname or IP
+            method: CONNECT | GET | POST | EXECUTE
+            host_id: enforcer host identifier
+            runtime_os: linux | windows | macos
+            agent_id: agent process name
+        """
+        input_data = {
+            "action": action,
+            "method": method,
+            "host_id": host_id,
+            "runtime_os": runtime_os,
+            "agent_id": agent_id,
+        }
+
+        if not self.is_available():
+            return False, "Policy Engine Unavailable (fail-closed)"
+
+        try:
+            response = self._request_json(
+                "/v1/data/sentinel/runtime/policy/allow",
+                payload={"input": input_data},
+            )
+        except Exception as exc:
+            logger.error("Runtime policy evaluation failed: %s", exc)
+            return False, "Policy Engine Error (fail-closed)"
+
+        is_allowed = bool(response.get("result", False))
+        verdict = response.get("verdict", "DENY")
+
+        if is_allowed:
+            return True, f"Authorized by Runtime Policy ({verdict})"
+        return False, f"Denied by Runtime Policy ({verdict})"
