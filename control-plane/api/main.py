@@ -245,17 +245,6 @@ async def health_check():
     return body
 
 
-@app.get("/", tags=["Root"])
-async def root_index():
-    """Root landing page."""
-    return {
-        "message": "Gavel OS Control Plane is ACTIVE",
-        "status": "online",
-        "documentation": "/docs",
-        "health": "/health",
-    }
-
-
 @app.get("/readyz", tags=["Health"])
 async def readiness_check():
     """Kubernetes readiness probe."""
