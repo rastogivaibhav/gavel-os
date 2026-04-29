@@ -12,6 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
+from sentinel.circuit_breaker import CircuitBreaker
+
 logger = logging.getLogger("sentinel.opa")
 
 
@@ -24,18 +26,34 @@ class OPAValidationEngine:
         self.package_path = os.getenv("OPA_PACKAGE_PATH", "sentinel/api/authz").strip("/")
         self.timeout_seconds = float(os.getenv("OPA_TIMEOUT_SECONDS", "2.0"))
 
-    def _request_json(self, path: str, payload: Dict[str, Any] | None = None) -> Dict[str, Any]:
-        target_url = urljoin(f"{self.base_url}/", path.lstrip("/"))
-        body = None
-        headers = {"Accept": "application/json"}
-        if payload is not None:
-            body = json.dumps(payload).encode("utf-8")
-            headers["Content-Type"] = "application/json"
+        # Circuit breaker for OPA service
+        self.circuit_breaker = CircuitBreaker(
+            name="opa_service",
+            failure_threshold=int(os.getenv("OPA_CB_FAILURE_THRESHOLD", "5")),
+            recovery_timeout_seconds=int(os.getenv("OPA_CB_RECOVERY_TIMEOUT", "60")),
+            expected_exception=Exception,
+        )
 
-        request = Request(target_url, data=body, headers=headers, method="POST" if payload is not None else "GET")
-        with urlopen(request, timeout=self.timeout_seconds) as response:
-            raw = response.read().decode("utf-8")
-            return json.loads(raw) if raw else {}
+    def _request_json(self, path: str, payload: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        """Make HTTP request to OPA with circuit breaker protection."""
+        def _make_request():
+            target_url = urljoin(f"{self.base_url}/", path.lstrip("/"))
+            body = None
+            headers = {"Accept": "application/json"}
+            if payload is not None:
+                body = json.dumps(payload).encode("utf-8")
+                headers["Content-Type"] = "application/json"
+
+            request = Request(target_url, data=body, headers=headers, method="POST" if payload is not None else "GET")
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                raw = response.read().decode("utf-8")
+                return json.loads(raw) if raw else {}
+
+        try:
+            return self.circuit_breaker.call(_make_request)
+        except Exception as e:
+            logger.error(f"Circuit breaker open or request failed: {e}")
+            raise
 
     def is_available(self) -> bool:
         try:
@@ -136,3 +154,7 @@ class OPAValidationEngine:
         if is_allowed:
             return True, f"Authorized by Runtime Policy ({verdict})"
         return False, f"Denied by Runtime Policy ({verdict})"
+
+    def get_circuit_breaker_status(self) -> dict:
+        """Get circuit breaker status for monitoring."""
+        return self.circuit_breaker.get_status()
