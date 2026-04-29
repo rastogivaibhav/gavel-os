@@ -1,0 +1,13 @@
+{
+  "name": "gavel-os-ui",
+  "version": "1.0.0",
+  "description": "Gavel OS Web Dashboard",
+  "scripts": {
+    "build:css": "tailwindcss -i ./static/css/tailwind.css -o ./static/css/output.css",
+    "watch:css": "tailwindcss -i ./static/css/tailwind.css -o ./static/css/output.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.1",
+    "@tailwindcss/forms": "^0.5.7"
+  }
+}
