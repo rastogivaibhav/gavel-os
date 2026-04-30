@@ -121,13 +121,40 @@ Gavel is **not** a prompt guardrail, LLM content filter, or replacement for appl
 
 ## Quickstart
 
-**Prerequisites:** Docker, Docker Compose, Go 1.21+, `openssl`
+**Prerequisites:** Docker + Docker Compose.
+
+Optional (depending on what you run):
+- Go 1.21+ (to build the enforcer)
+- `jq` (for the token examples below)
+- `openssl` (if you want to generate secrets manually instead of using the start scripts)
+
+By default, `docker-compose.yml` exposes the control plane at **`http://localhost:18000`**
+(override with `GAVEL_API_PORT` in `.env` / your environment).
 
 ### 1. Clone and configure
 
 ```bash
 git clone https://github.com/gavel-os/gavel
 cd gavel
+```
+
+### 2. Start the control plane
+
+Recommended (creates `.env` with generated secrets on first run):
+
+```bash
+# Linux/macOS
+./start.sh
+```
+
+```powershell
+# Windows
+.\start.ps1
+```
+
+Manual (if you prefer to manage `.env` yourself):
+
+```bash
 cp .env.example .env
 ```
 
@@ -143,8 +170,6 @@ sed -i "s/^API_SECRET_KEY=$/API_SECRET_KEY=$API_KEY/" .env
 sed -i "s/^ADMIN_SECRET_KEY=$/ADMIN_SECRET_KEY=$ADMIN_KEY/" .env
 ```
 
-### 2. Start the control plane
-
 ```bash
 docker compose up -d
 ```
@@ -152,7 +177,7 @@ docker compose up -d
 Starts PostgreSQL, Redis, OPA, and the control plane. Verify in ~15 seconds:
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:18000/health
 ```
 
 ```json
@@ -172,18 +197,18 @@ curl http://localhost:8000/health
 ### 3. Get a token and test a policy decision
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:8000/auth/token \
+TOKEN=$(curl -s -X POST http://localhost:18000/auth/token \
   -H "Content-Type: application/json" \
   -d '{"role":"customer","clearance_level":2}' | jq -r .access_token)
 
 # Allowed
-curl -s -X POST http://localhost:8000/external/validate \
+curl -s -X POST http://localhost:18000/external/validate \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"action":"read.data","method":"GET","required_clearance":1}' | jq .
 
 # Denied — blocked action
-curl -s -X POST http://localhost:8000/external/validate \
+curl -s -X POST http://localhost:18000/external/validate \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"action":"data.delete","method":"EXECUTE","required_clearance":1}' | jq .
@@ -191,7 +216,7 @@ curl -s -X POST http://localhost:8000/external/validate \
 
 ### 4. Access the Control Plane Dashboard
 
-Open your browser to **`http://localhost:8000`** to access the web-based control plane UI:
+Open your browser to **`http://localhost:18000`** to access the web-based control plane UI:
 
 - **Dashboard** — System health, component status, recent events
 - **Audit Ledger** — Forensic analysis with SHA-256 chain verification
@@ -211,7 +236,7 @@ GOOS=linux GOARCH=amd64 go build -o gavel-enforcer .
 sudo ./gavel-enforcer -preflight
 
 # Start
-export GAVEL_ENGINE_URL=http://localhost:8000
+export GAVEL_ENGINE_URL=http://localhost:18000
 export GAVEL_MACHINE_KEY=<your-machine-key>
 sudo ./gavel-enforcer
 ```
@@ -223,7 +248,7 @@ cd enforcer
 $env:GOOS = 'windows'; $env:GOARCH = 'amd64'
 go build -o gavel-enforcer.exe .
 
-$env:GAVEL_ENGINE_URL = "http://localhost:8000"
+$env:GAVEL_ENGINE_URL = "http://localhost:18000"
 $env:GAVEL_MACHINE_KEY = "<your-machine-key>"
 .\gavel-enforcer.exe
 ```
@@ -501,7 +526,7 @@ The commercial Gavel product adds:
 
 ## License
 
-Apache 2.0. See [LICENSE](LICENSE).
+Apache License 2.0 (`Apache-2.0`). See [LICENSE](LICENSE).
 
 ---
 
