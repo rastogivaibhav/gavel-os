@@ -1,7 +1,6 @@
 """Error handling and graceful degradation service."""
 
 import logging
-from typing import Optional, Tuple
 from enum import Enum
 
 logger = logging.getLogger("sentinel.errors")
@@ -88,7 +87,10 @@ class OPACircuitBreakerOpen(OPAError):
     def __init__(self):
         """Initialize circuit breaker open error."""
         super().__init__(
-            message="OPA service temporarily unavailable due to repeated failures. Retrying with fail-closed policy.",
+            message=(
+                "OPA service temporarily unavailable due to repeated failures. "
+                "Retrying with fail-closed policy."
+            ),
             recoverable=True,
         )
 
@@ -107,7 +109,7 @@ class OPATimeout(OPAError):
 class ValidationError(GavelError):
     """Input validation error."""
 
-    def __init__(self, message: str, field: Optional[str] = None):
+    def __init__(self, message: str, field: str | None = None):
         """Initialize validation error."""
         code = f"VALIDATION_ERROR_{field.upper()}" if field else "VALIDATION_ERROR"
         super().__init__(
@@ -147,7 +149,7 @@ class EscalationServiceError(GavelError):
 class NotificationError(GavelError):
     """Notification service error."""
 
-    def __init__(self, message: str, backend: Optional[str] = None):
+    def __init__(self, message: str, backend: str | None = None):
         """Initialize notification error."""
         code = f"NOTIFICATION_ERROR_{backend.upper()}" if backend else "NOTIFICATION_ERROR"
         super().__init__(
@@ -163,7 +165,7 @@ class ErrorContext:
 
     def __init__(self):
         """Initialize error context."""
-        self.last_error: Optional[GavelError] = None
+        self.last_error: GavelError | None = None
         self.error_count = 0
         self.recovery_attempts = 0
 
@@ -209,7 +211,7 @@ class ErrorHandler:
 
     def handle_database_error(
         self, error: Exception, operation: str = "unknown"
-    ) -> Tuple[bool, dict]:
+    ) -> tuple[bool, dict]:
         """Handle database error.
 
         Args:
@@ -240,7 +242,7 @@ class ErrorHandler:
 
     def handle_opa_error(
         self, error: Exception, circuit_breaker_open: bool = False
-    ) -> Tuple[bool, dict]:
+    ) -> tuple[bool, dict]:
         """Handle OPA error.
 
         Args:
@@ -262,7 +264,7 @@ class ErrorHandler:
         self.context.record_error(gavel_error)
         return gavel_error.recoverable, gavel_error.to_response()
 
-    def handle_validation_error(self, message: str, field: Optional[str] = None) -> dict:
+    def handle_validation_error(self, message: str, field: str | None = None) -> dict:
         """Handle validation error.
 
         Args:

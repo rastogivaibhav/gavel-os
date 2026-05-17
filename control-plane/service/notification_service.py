@@ -7,10 +7,9 @@ import smtplib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from email.mime.text import MIMEText
+from enum import Enum
 
 import httpx
 
@@ -38,10 +37,10 @@ class NotificationPayload:
     tool_call_id: str
     operation: str
     agent_id: str
-    approver_id: Optional[str] = None
-    approval_reason: Optional[str] = None
-    deadline: Optional[datetime] = None
-    parameters: Optional[dict] = None
+    approver_id: str | None = None
+    approval_reason: str | None = None
+    deadline: datetime | None = None
+    parameters: dict | None = None
 
 
 class NotificationBackend(ABC):
@@ -57,7 +56,6 @@ class NotificationBackend(ABC):
         Returns:
             True if successful, False otherwise
         """
-        pass
 
 
 class LoggingBackend(NotificationBackend):
@@ -120,7 +118,7 @@ class LoggingBackend(NotificationBackend):
 class SlackBackend(NotificationBackend):
     """Backend that sends notifications via Slack webhook."""
 
-    def __init__(self, webhook_url: Optional[str] = None):
+    def __init__(self, webhook_url: str | None = None):
         """Initialize Slack backend.
 
         Args:
@@ -192,20 +190,25 @@ class SlackBackend(NotificationBackend):
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": f"*Parameters:*\n```{json.dumps(payload.parameters, indent=2)}```",
+                            "text": (
+                                f"*Parameters:*\n```{json.dumps(payload.parameters, indent=2)}```"
+                            ),
                         },
                     },
                     {
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": f"*Deadline:*\n{payload.deadline.isoformat() if payload.deadline else 'N/A'}",
+                            "text": (
+                                "*Deadline:*\n"
+                                f"{payload.deadline.isoformat() if payload.deadline else 'N/A'}"
+                            ),
                         },
                     },
                 ]
             }
 
-        elif payload.notification_type == NotificationType.APPROVED:
+        if payload.notification_type == NotificationType.APPROVED:
             return {
                 "blocks": [
                     {
@@ -238,7 +241,7 @@ class SlackBackend(NotificationBackend):
                 ]
             }
 
-        elif payload.notification_type == NotificationType.DENIED:
+        if payload.notification_type == NotificationType.DENIED:
             return {
                 "blocks": [
                     {
@@ -271,16 +274,13 @@ class SlackBackend(NotificationBackend):
                 ]
             }
 
-        else:
-            return {
-                "text": f"{payload.notification_type.value}: {payload.ticket_number}"
-            }
+        return {"text": f"{payload.notification_type.value}: {payload.ticket_number}"}
 
 
 class EmailBackend(NotificationBackend):
     """Backend that sends notifications via email."""
 
-    def __init__(self, smtp_server: Optional[str] = None):
+    def __init__(self, smtp_server: str | None = None):
         """Initialize email backend.
 
         Args:
@@ -341,7 +341,7 @@ Tool Call: {payload.tool_call_id}
 Parameters:
 {json.dumps(payload.parameters, indent=2)}
 
-Deadline: {payload.deadline.isoformat() if payload.deadline else 'N/A'}
+Deadline: {payload.deadline.isoformat() if payload.deadline else "N/A"}
 
 Please review and approve or deny this escalation.
 """
@@ -353,7 +353,7 @@ Escalation Approved
 
 Ticket: {payload.ticket_number}
 Approved by: {payload.approver_id}
-Reason: {payload.approval_reason or 'No reason provided'}
+Reason: {payload.approval_reason or "No reason provided"}
 
 The escalation has been approved and the operation will proceed.
 """
@@ -365,7 +365,7 @@ Escalation Denied
 
 Ticket: {payload.ticket_number}
 Denied by: {payload.approver_id}
-Reason: {payload.approval_reason or 'No reason provided'}
+Reason: {payload.approval_reason or "No reason provided"}
 
 The escalation has been denied and the operation will not proceed.
 """
@@ -435,7 +435,7 @@ class NotificationService:
         operation: str,
         agent_id: str,
         deadline: datetime,
-        parameters: Optional[dict] = None,
+        parameters: dict | None = None,
     ) -> bool:
         """Send approval required notification."""
         payload = NotificationPayload(
@@ -460,7 +460,7 @@ class NotificationService:
         operation: str,
         agent_id: str,
         approver_id: str,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> bool:
         """Send approval granted notification."""
         payload = NotificationPayload(
@@ -485,7 +485,7 @@ class NotificationService:
         operation: str,
         agent_id: str,
         approver_id: str,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> bool:
         """Send approval denied notification."""
         payload = NotificationPayload(

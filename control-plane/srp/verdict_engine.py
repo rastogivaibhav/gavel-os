@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Optional, Set
 
 from .models import Proposal, Verdict, VerdictReason, VerdictType
 from .policy import PolicySet, evaluate_policies
@@ -15,16 +14,16 @@ logger = logging.getLogger("srp.verdict")
 class VerdictEngineConfig:
     """Static, deterministic configuration for verdict evaluation."""
 
-    allowed_api_refs: Optional[Set[str]] = None
+    allowed_api_refs: set[str] | None = None
     max_parameters_bytes: int = 16_000
     max_reasons: int = 8
-    policy_set: Optional[PolicySet] = None
+    policy_set: PolicySet | None = None
 
 
 class VerdictEngine:
     """Deterministic verdict engine for canonical proposals."""
 
-    def __init__(self, config: Optional[VerdictEngineConfig] = None) -> None:
+    def __init__(self, config: VerdictEngineConfig | None = None) -> None:
         self._config = config or VerdictEngineConfig()
 
     def evaluate(self, proposal: Proposal) -> Verdict:
@@ -70,7 +69,9 @@ class VerdictEngine:
 
         # Rule 4: parameter size limit
         try:
-            encoded = json.dumps(proposal.tool_call.parameters, separators=(",", ":"), sort_keys=True)
+            encoded = json.dumps(
+                proposal.tool_call.parameters, separators=(",", ":"), sort_keys=True
+            )
         except (TypeError, ValueError):
             verdict = VerdictType.BLOCK
             reasons.append(
@@ -137,4 +138,3 @@ class VerdictEngine:
         )
 
         return decision
-

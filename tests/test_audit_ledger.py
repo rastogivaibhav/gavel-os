@@ -190,6 +190,7 @@ async def test_verify_chain_valid_chain():
     conn = AsyncMock()
     conn.fetch = AsyncMock(return_value=rows)
     pool = AsyncMock()
+    pool.acquire = MagicMock()
     pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
     pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -222,6 +223,7 @@ async def test_verify_chain_detects_tampered_entry():
     conn = AsyncMock()
     conn.fetch = AsyncMock(return_value=rows)
     pool = AsyncMock()
+    pool.acquire = MagicMock()
     pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
     pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -239,6 +241,7 @@ async def test_verify_chain_empty_range_is_valid():
     conn = AsyncMock()
     conn.fetch = AsyncMock(return_value=[])
     pool = AsyncMock()
+    pool.acquire = MagicMock()
     pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
     pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
 

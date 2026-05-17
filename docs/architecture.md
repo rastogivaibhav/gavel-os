@@ -4,7 +4,7 @@
 
 Every current AI agent governance toolkit operates at the **application layer**. The policy engine and the agent run in the same process, in the same trust boundary. A compromised agent or a successful prompt injection attack owns the governance layer too.
 
-Gavel enforces at the **OS layer** — below the application trust boundary — so enforcement cannot be bypassed from userspace.
+Gavel explores enforcement at the **OS/runtime layer** below the application trust boundary, so policy decisions can be evaluated outside the agent process instead of relying only on in-process middleware.
 
 ## Trust Boundaries
 
@@ -23,7 +23,7 @@ Gavel enforces at the **OS layer** — below the application trust boundary — 
 │  └─────────┼────────────────────────────────────────────────┘   │
 │            │                                                     │
 │  ┌─────────▼────────────────────────────────────────────────┐   │
-│  │  Kernel / OS Layer  [cannot be bypassed from userspace]  │   │
+│  │  Kernel / OS Layer  [experimental enforcement]           │   │
 │  │                                                          │   │
 │  │  Linux:   eBPF cgroup socket hook                        │   │
 │  │  Windows: ETW process monitor + WFP network filter       │   │
@@ -54,11 +54,11 @@ Gavel enforces at the **OS layer** — below the application trust boundary — 
 
 ### Enforcer (Go)
 
-The enforcer runs on each host where AI agents operate. It intercepts agent activity at the OS level and consults the control plane for policy decisions.
+The enforcer runs on each host where AI agents operate. It observes or intercepts host activity depending on platform maturity and consults the control plane for policy decisions.
 
-**Linux** — eBPF cgroup socket programs attach to the cgroup hierarchy. All outbound connections from monitored PIDs pass through the eBPF hook before reaching the network stack. No userspace bypass is possible.
+**Linux** — partial enforcement prototype using eBPF cgroup socket programs and centrally synced runtime policy.
 
-**Windows** — ETW (Event Tracing for Windows) monitors process creation events. WFP (Windows Filtering Platform) applies outbound block rules at the network stack level. DNS-resolved hostnames are periodically refreshed.
+**Windows** — experimental ETW process monitoring plus WFP outbound block-rule integration.
 
 **macOS** — Audit-only mode. The enforcer connects to the control plane, receives policy, and reports events, but cannot block connections. System Extension enforcement is a planned increment.
 

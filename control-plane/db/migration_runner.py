@@ -5,7 +5,6 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Optional
 
 import asyncpg
 
@@ -15,7 +14,7 @@ logger = logging.getLogger("sentinel.migration")
 class MigrationRunner:
     """Executes database migrations in order."""
 
-    def __init__(self, db_url: str, migrations_dir: str = "control-plane/db/migrations"):
+    def __init__(self, db_url: str, migrations_dir: str | None = None):
         """Initialize migration runner.
 
         Args:
@@ -23,8 +22,19 @@ class MigrationRunner:
             migrations_dir: Directory containing migration files
         """
         self.db_url = db_url
-        self.migrations_dir = Path(migrations_dir)
-        self.conn: Optional[asyncpg.Connection] = None
+        default_dir = Path(__file__).resolve().parents[2] / "database" / "migrations"
+        selected_dir = Path(migrations_dir) if migrations_dir else default_dir
+        if (
+            not selected_dir.exists()
+            and str(selected_dir).replace("\\", "/") == "control-plane/db/migrations"
+        ):
+            logger.warning(
+                "control-plane/db/migrations is deprecated; using %s instead",
+                default_dir,
+            )
+            selected_dir = default_dir
+        self.migrations_dir = selected_dir
+        self.conn: asyncpg.Connection | None = None
 
     async def connect(self):
         """Connect to database."""
@@ -37,20 +47,20 @@ class MigrationRunner:
             await self.conn.close()
             logger.info("Disconnected from database")
 
-    async def _ensure_schema_version_table(self):
-        """Ensure schema_version table exists."""
+    async def _ensure_schema_migrations_table(self):
+        """Ensure schema_migrations table exists."""
         await self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS schema_version (
-                version INT PRIMARY KEY,
-                applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                description TEXT
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version     INTEGER PRIMARY KEY,
+                description TEXT        NOT NULL,
+                applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
-        logger.debug("Schema version table ensured")
+        logger.debug("Schema migrations table ensured")
 
     async def _get_applied_versions(self) -> set[int]:
         """Get set of applied migration versions."""
-        rows = await self.conn.fetch("SELECT version FROM schema_version ORDER BY version")
+        rows = await self.conn.fetch("SELECT version FROM schema_migrations ORDER BY version")
         return {row["version"] for row in rows}
 
     async def _get_migration_files(self) -> list[tuple[int, Path]]:
@@ -81,7 +91,7 @@ class MigrationRunner:
         """
         try:
             await self.connect()
-            await self._ensure_schema_version_table()
+            await self._ensure_schema_migrations_table()
 
             applied = await self._get_applied_versions()
             migrations = await self._get_migration_files()
@@ -100,7 +110,11 @@ class MigrationRunner:
                     # Record migration
                     description = path.stem.replace(f"{version:03d}_", "")
                     await self.conn.execute(
-                        "INSERT INTO schema_version (version, description) VALUES ($1, $2)",
+                        """
+                        INSERT INTO schema_migrations (version, description)
+                        VALUES ($1, $2)
+                        ON CONFLICT (version) DO NOTHING
+                        """,
                         version,
                         description,
                     )
@@ -124,15 +138,13 @@ class MigrationRunner:
         """
         try:
             await self.connect()
-            await self._ensure_schema_version_table()
+            await self._ensure_schema_migrations_table()
 
             applied = await self._get_applied_versions()
             migrations = await self._get_migration_files()
 
             pending = [
-                (version, path.name)
-                for version, path in migrations
-                if version not in applied
+                (version, path.name) for version, path in migrations if version not in applied
             ]
 
             return {
@@ -163,7 +175,7 @@ async def main():
     )
     parser.add_argument(
         "--migrations-dir",
-        default="control-plane/db/migrations",
+        default=None,
         help="Migrations directory",
     )
 

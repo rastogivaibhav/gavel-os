@@ -1,8 +1,8 @@
 """Health check service for system dependencies."""
 
 import logging
-from datetime import datetime, timezone
-from typing import Dict, Any, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 from sentinel.opa_engine import OPAValidationEngine
 
@@ -17,7 +17,7 @@ class HealthCheckService:
         self.opa_engine = opa_engine
         self.db_pool = db_pool
 
-    async def check_opa_health(self) -> Tuple[bool, str]:
+    async def check_opa_health(self) -> tuple[bool, str]:
         """Check OPA service availability."""
         # Check both OPA availability and circuit breaker status
         if not self.opa_engine.is_available():
@@ -25,14 +25,11 @@ class HealthCheckService:
 
         cb_status = self.opa_engine.get_circuit_breaker_status()
         if cb_status["state"] == "open":
-            return (
-                False,
-                f"OPA circuit breaker open (failures: {cb_status['failure_count']})"
-            )
+            return (False, f"OPA circuit breaker open (failures: {cb_status['failure_count']})")
 
         return (True, "OPA healthy")
 
-    async def check_db_health(self) -> Tuple[bool, str]:
+    async def check_db_health(self) -> tuple[bool, str]:
         """Check PostgreSQL database availability."""
         if not self.db_pool:
             return (False, "Database pool not configured")
@@ -45,7 +42,7 @@ class HealthCheckService:
             logger.error(f"Database health check failed: {e}")
             return (False, f"Database error: {e}")
 
-    async def get_system_health(self) -> Dict[str, Any]:
+    async def get_system_health(self) -> dict[str, Any]:
         """Get overall system health status."""
         opa_ok, opa_msg = await self.check_opa_health()
         db_ok, db_msg = await self.check_db_health()
@@ -55,7 +52,7 @@ class HealthCheckService:
 
         return {
             "status": "healthy" if overall_healthy else "degraded",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "components": {
                 "opa": {
                     "status": "healthy" if opa_ok else "unhealthy",

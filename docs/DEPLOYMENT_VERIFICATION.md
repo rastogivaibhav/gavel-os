@@ -73,7 +73,7 @@ $ curl -X POST http://localhost:8000/auth/token \
   -d '{"role":"customer","clearance_level":1,"tenant_id":"default"}'
 
 {
-  "access_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjE0ZjZkYzkzZjg5MGZmZDQifQ...",
+  "access_token": "<JWT_TOKEN>",
   "token_type": "bearer",
   "expires_in": 3600
 }

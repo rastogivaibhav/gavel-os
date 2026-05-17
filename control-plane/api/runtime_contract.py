@@ -4,7 +4,7 @@ Shared host-runtime contract models for Gavel/Sentinel Release 1.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -109,7 +109,7 @@ class MachineRuntimeState(BaseModel):
 
 class RuntimeEventEnvelope(BaseModel):
     event_type: RuntimeEventType
-    event_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    event_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
     host_id: str = Field(min_length=1)
     runtime_os: RuntimeOS
     runtime_arch: str = Field(min_length=1)
@@ -125,7 +125,7 @@ class RuntimeEventEnvelope(BaseModel):
     @classmethod
     def ensure_timezone(cls, value: datetime) -> datetime:
         if isinstance(value, datetime) and value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
     @field_validator("metadata")

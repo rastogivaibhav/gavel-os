@@ -8,8 +8,7 @@ and verify chain integrity. Backed by PostgresAuditLedgerClient.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -20,16 +19,18 @@ logger = logging.getLogger("sentinel-recipe-engine")
 
 class LedgerQueryParams(BaseModel):
     """Query parameters for audit ledger search."""
+
     start_date: datetime
     end_date: datetime
-    actor: Optional[str] = None
+    actor: str | None = None
     tenant_id: str = "default"
 
 
 class VerifyRequest(BaseModel):
     """Request body for chain integrity verification."""
-    start_date: datetime = datetime(2020, 1, 1, tzinfo=timezone.utc)
-    end_date: datetime = datetime(2030, 12, 31, tzinfo=timezone.utc)
+
+    start_date: datetime = datetime(2020, 1, 1, tzinfo=UTC)
+    end_date: datetime = datetime(2030, 12, 31, tzinfo=UTC)
 
 
 @router.post("/ledger")
@@ -79,7 +80,7 @@ async def query_audit_ledger(request: Request, params: LedgerQueryParams):
         }
     except Exception as e:
         logger.exception("Audit ledger query failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/verify")
@@ -103,8 +104,8 @@ async def verify_chain_integrity(request: Request, params: VerifyRequest):
         return {
             "is_valid": report.is_valid,
             "corrupted_entries": report.corrupted_entries,
-            "verified_at": datetime.now(timezone.utc).isoformat(),
+            "verified_at": datetime.now(UTC).isoformat(),
         }
     except Exception as e:
         logger.exception("Chain verification failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

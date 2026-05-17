@@ -1,6 +1,5 @@
 """Shared pytest fixtures and configuration for all tests."""
 
-import asyncio
 import json
 import os
 from typing import AsyncGenerator, Dict, Any
@@ -9,6 +8,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 import asyncpg
 from httpx import AsyncClient
+
+# Unit and ASGI tests should not require local Redis, even if a developer's
+# shell or .env points REDIS_URL at a production-like rate-limit backend.
+os.environ["REDIS_URL"] = ""
 
 # Optional imports for integration tests
 try:
@@ -19,14 +22,6 @@ except ImportError:
 
 # Test database
 TEST_DATABASE_URL = "postgresql://testuser:testpass@localhost:5432/gavel_test"
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create event loop for entire test session."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest.fixture(scope="session")
@@ -104,6 +99,37 @@ def sample_tool_proposal():
         "user_id": "user-001",
         "replay_nonce": "nonce_1234567890123456",
     }
+
+
+def make_proposal(**overrides):
+    """Build a default SRP proposal for policy and verdict-engine tests."""
+    from srp.models import CallerContext, Proposal, ToolCall
+
+    caller = overrides.pop(
+        "caller",
+        CallerContext(
+            tenant_id="test-tenant",
+            caller_id="agent-1",
+            role="customer",
+        ),
+    )
+    tool_call = overrides.pop(
+        "tool_call",
+        ToolCall(
+            api_ref="payments.api",
+            operation="read",
+            parameters={"amount": 100.0},
+        ),
+    )
+    defaults = {
+        "caller": caller,
+        "tool_call": tool_call,
+        "environment": "dev",
+        "origin": "other",
+        "replay_nonce": "nonce-1234567890",
+    }
+    defaults.update(overrides)
+    return Proposal(**defaults)
 
 
 @pytest.fixture

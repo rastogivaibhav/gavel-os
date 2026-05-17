@@ -10,8 +10,8 @@ import * as vscode from 'vscode';
 import { GavelClient } from '../api/GavelClient';
 import { AuditEntry } from '../api/types';
 
-export class AuditLedgerProvider implements vscode.TreeDataProvider<AuditTreeItem> {
-  private readonly _onDidChangeTreeData = new vscode.EventEmitter<AuditTreeItem | undefined>();
+export class AuditLedgerProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+  private readonly _onDidChangeTreeData = new vscode.EventEmitter<vscode.TreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private entries: AuditEntry[] = [];
@@ -54,11 +54,11 @@ export class AuditLedgerProvider implements vscode.TreeDataProvider<AuditTreeIte
     await this.refresh();
   }
 
-  getTreeItem(element: AuditTreeItem): vscode.TreeItem {
+  getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
     return element;
   }
 
-  getChildren(element?: AuditTreeItem): AuditTreeItem[] {
+  getChildren(element?: vscode.TreeItem): vscode.TreeItem[] {
     if (element) return [];
     if (this.entries.length === 0) {
       return [new PlaceholderItem('No audit entries in the last 24 hours')];

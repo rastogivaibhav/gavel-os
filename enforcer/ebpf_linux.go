@@ -18,7 +18,7 @@ type linuxEnforcerObjects struct {
 }
 
 func ebpfProgramStatus() string {
-	return "available"
+	return "runtime-generated"
 }
 
 func attachEnforcer(cgroupPath string, config LinuxEnforcerConfig) (func(), error) {

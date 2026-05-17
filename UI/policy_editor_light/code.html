@@ -219,13 +219,13 @@
 }
 
 <span class="token-keyword">is_trusted_ca</span>(cert) {
-    ca_list := [<span class="token-string">"GAVEL_ROOT_01"</span>, <span class="token-string">"SYSTEM_AUTH_X"</span>]
+    ca_list := [<span class="token-string">"demo-root-ca"</span>, <span class="token-string">"demo-system-ca"</span>]
     cert.issuer == ca_list[_]
 }
 
 <span class="token-comment"># Deny deprecated cipher suites</span>
 <span class="token-keyword">deny</span>[msg] {
-    ciphers := [<span class="token-string">"TLS_RSA_WITH_AES_128_CBC_SHA"</span>, <span class="token-string">"TLS_3DES"</span>]
+    ciphers := [<span class="token-string">"legacy-rsa-cbc"</span>, <span class="token-string">"legacy-3des"</span>]
     input.request.cipher == ciphers[_]
     msg := sprintf(<span class="token-string">"Insecure cipher detected: %v"</span>, [input.request.cipher])
 }

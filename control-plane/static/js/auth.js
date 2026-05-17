@@ -8,10 +8,10 @@ async function getAuthToken() {
     const expiry = sessionStorage.getItem('gavel_token_expiry');
     if (token && expiry && new Date(expiry) > new Date()) return token;
 
-    const response = await fetch('/api/auth/token', {
+    const response = await fetch('/auth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ windows_user: 'AD\\user', clearance_level: 2 })
+      body: JSON.stringify({})
     });
 
     if (!response.ok) throw new Error('Token request failed');

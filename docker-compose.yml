@@ -60,8 +60,8 @@ services:
   # ── Gavel Control Plane ─────────────────────────────────────────────────────
   control-plane:
     build:
-      context: ./control-plane
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: control-plane/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:

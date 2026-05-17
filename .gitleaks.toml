@@ -1,0 +1,5 @@
+[allowlist]
+description = "Public demo identifiers that are not credentials."
+regexes = [
+  '''"api_ref"\s*:\s*"retail\.[a-z.]+\.\w+"''',
+]

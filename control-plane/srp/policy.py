@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
-from pydantic import BaseModel, Field, conlist, constr, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, conlist, constr
 
 from .models import Proposal, VerdictReason, VerdictType
 
@@ -22,14 +23,14 @@ class PolicyCondition(BaseModel):
     a set membership check (value must be in the configured list).
     """
 
-    tenants: Optional[conlist(constr(strip_whitespace=True, min_length=1), min_length=1)] = None
-    roles: Optional[conlist(constr(strip_whitespace=True, min_length=1), min_length=1)] = None
-    environments: Optional[conlist(constr(strip_whitespace=True, min_length=1), min_length=1)] = None
-    api_refs: Optional[conlist(constr(strip_whitespace=True, min_length=1), min_length=1)] = None
-    operations: Optional[conlist(constr(strip_whitespace=True, min_length=1), min_length=1)] = None
+    tenants: conlist(constr(strip_whitespace=True, min_length=1), min_length=1) | None = None
+    roles: conlist(constr(strip_whitespace=True, min_length=1), min_length=1) | None = None
+    environments: conlist(constr(strip_whitespace=True, min_length=1), min_length=1) | None = None
+    api_refs: conlist(constr(strip_whitespace=True, min_length=1), min_length=1) | None = None
+    operations: conlist(constr(strip_whitespace=True, min_length=1), min_length=1) | None = None
 
     # Minimal numeric parameter constraints: parameters[field] <= max_value
-    max_numeric_parameters: Dict[str, float] = Field(default_factory=dict)
+    max_numeric_parameters: dict[str, float] = Field(default_factory=dict)
 
 
 class PolicyRule(BaseModel):
@@ -48,16 +49,16 @@ class PolicySet(BaseModel):
 
     name: constr(strip_whitespace=True, min_length=1)
     version: constr(strip_whitespace=True, min_length=1)
-    rules: List[PolicyRule]
+    rules: list[PolicyRule]
 
     model_config = ConfigDict(extra="forbid")
 
 
 @dataclass(frozen=True)
 class PolicyEvaluationResult:
-    verdict: Optional[VerdictType]
-    reasons: List[VerdictReason]
-    policy_ids: List[str]
+    verdict: VerdictType | None
+    reasons: list[VerdictReason]
+    policy_ids: list[str]
 
 
 def evaluate_policies(policy_set: PolicySet, proposal: Proposal) -> PolicyEvaluationResult:
@@ -66,9 +67,7 @@ def evaluate_policies(policy_set: PolicySet, proposal: Proposal) -> PolicyEvalua
     Rules are evaluated in ascending priority order, then by id. First
     matching rule decides the effect.
     """
-    sorted_rules: Sequence[PolicyRule] = sorted(
-        policy_set.rules, key=lambda r: (r.priority, r.id)
-    )
+    sorted_rules: Sequence[PolicyRule] = sorted(policy_set.rules, key=lambda r: (r.priority, r.id))
 
     for rule in sorted_rules:
         if not _matches(rule.condition, proposal):
@@ -115,7 +114,7 @@ def _matches(cond: PolicyCondition, proposal: Proposal) -> bool:
     # Semantics: `max_numeric_parameters` defines deterministic *limits*.
     # The rule matches when at least one specified field exists and exceeds
     # its max value. (This supports "BLOCK above X" policies.)
-    params: Dict[str, Any] = tool_call.parameters or {}
+    params: dict[str, Any] = tool_call.parameters or {}
     if cond.max_numeric_parameters:
         exceeded = False
         for field, max_value in cond.max_numeric_parameters.items():
@@ -130,4 +129,3 @@ def _matches(cond: PolicyCondition, proposal: Proposal) -> bool:
             return False
 
     return True
-

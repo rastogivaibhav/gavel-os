@@ -1,7 +1,6 @@
 """Health check endpoint."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Optional
 
 from service.health_check import HealthCheckService
 
@@ -9,7 +8,7 @@ logger_name = "sentinel.health"
 router = APIRouter(prefix="/health", tags=["health"])
 
 # This would be injected from the app
-_health_service: Optional[HealthCheckService] = None
+_health_service: HealthCheckService | None = None
 
 
 def set_health_service(service: HealthCheckService):
@@ -21,10 +20,7 @@ def set_health_service(service: HealthCheckService):
 async def get_health_service() -> HealthCheckService:
     """Dependency to get health check service."""
     if not _health_service:
-        raise HTTPException(
-            status_code=503,
-            detail="Health check service not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Health check service not initialized")
     return _health_service
 
 
@@ -34,16 +30,13 @@ async def health_check(
 ) -> dict:
     """Get system health status."""
     health_status = await service.get_system_health()
-    
+
     # Return 503 if system is degraded
     status_code = 200 if health_status["status"] == "healthy" else 503
-    
+
     if status_code == 503:
-        raise HTTPException(
-            status_code=status_code,
-            detail=health_status
-        )
-    
+        raise HTTPException(status_code=status_code, detail=health_status)
+
     return health_status
 
 
@@ -53,7 +46,7 @@ async def opa_health(
 ) -> dict:
     """Check OPA service health."""
     ok, message = await service.check_opa_health()
-    
+
     return {
         "service": "opa",
         "status": "healthy" if ok else "unhealthy",
@@ -67,7 +60,7 @@ async def db_health(
 ) -> dict:
     """Check database health."""
     ok, message = await service.check_db_health()
-    
+
     return {
         "service": "database",
         "status": "healthy" if ok else "unhealthy",

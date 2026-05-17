@@ -20,10 +20,9 @@ import base64
 import json
 import logging
 import os
-import time
 import threading
+import time
 from pathlib import Path
-from typing import Optional
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -38,7 +37,7 @@ _JWT_EXPIRY_SECONDS = int(os.getenv("JWT_EXPIRY_SECONDS", "3600"))
 
 _KEYS_DIR = Path(__file__).resolve().parent / "keys"
 _PRIVATE_KEY_PATH = os.getenv("JWT_PRIVATE_KEY_PATH", str(_KEYS_DIR / "private.pem"))
-_PUBLIC_KEY_PATH  = os.getenv("JWT_PUBLIC_KEY_PATH",  str(_KEYS_DIR / "public.pem"))
+_PUBLIC_KEY_PATH = os.getenv("JWT_PUBLIC_KEY_PATH", str(_KEYS_DIR / "public.pem"))
 
 # ── Key ID (kid) — used in JWKS and JWT header ────────────────────────────────
 # Defaults to a hash of the public key so it changes automatically on rotation.
@@ -47,16 +46,16 @@ _KEY_ID: str = os.getenv("JWT_KEY_ID", "")
 
 def _load_or_generate_keys() -> tuple[bytes, bytes]:
     priv_path = Path(_PRIVATE_KEY_PATH)
-    pub_path  = Path(_PUBLIC_KEY_PATH)
+    pub_path = Path(_PUBLIC_KEY_PATH)
 
     if priv_path.exists() and pub_path.exists():
         private_key = priv_path.read_bytes()
-        public_key  = pub_path.read_bytes()
+        public_key = pub_path.read_bytes()
         logger.info("Loaded RSA keys from %s", priv_path.parent)
         return private_key, public_key
 
-    from cryptography.hazmat.primitives.asymmetric import rsa
     from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     private_pem = key.private_bytes(
@@ -81,6 +80,7 @@ _PRIVATE_KEY, _PUBLIC_KEY = _load_or_generate_keys()
 def _derive_key_id(public_key_pem: bytes) -> str:
     """Derive a stable key ID from the public key bytes (first 8 hex chars of SHA-256)."""
     import hashlib
+
     return hashlib.sha256(public_key_pem).hexdigest()[:16]
 
 
@@ -88,6 +88,7 @@ _LOCAL_KID: str = _KEY_ID or _derive_key_id(_PUBLIC_KEY)
 
 
 # ── JWKS remote key cache ─────────────────────────────────────────────────────
+
 
 class _JWKSCache:
     """
@@ -102,7 +103,7 @@ class _JWKSCache:
 
     def __init__(self, jwks_url: str) -> None:
         self._url = jwks_url
-        self._keys: dict[str, bytes] = {}   # kid → public key PEM
+        self._keys: dict[str, bytes] = {}  # kid → public key PEM
         self._fetched_at: float = 0.0
         self._lock = threading.Lock()
 
@@ -159,9 +160,10 @@ _jwks_cache: _JWKSCache | None = _JWKSCache(_JWKS_URL) if _JWKS_URL else None
 
 # ── Token operations ──────────────────────────────────────────────────────────
 
+
 def create_token(
     role: str = "customer",
-    customer_id: Optional[str] = None,
+    customer_id: str | None = None,
     tenant_id: str = "default",
     clearance_level: int = 1,
     department: str = "external",
@@ -214,7 +216,8 @@ def verify_token(token: str) -> dict:
     if _jwks_cache:
         remote_keys = _jwks_cache.get_keys()
         candidates = (
-            [remote_keys[token_kid]] if token_kid and token_kid in remote_keys
+            [remote_keys[token_kid]]
+            if token_kid and token_kid in remote_keys
             else list(remote_keys.values())
         )
         last_exc: Exception = local_exc or jwt.InvalidTokenError("No matching key found in JWKS")
@@ -240,8 +243,8 @@ def get_jwks() -> dict:
     Suitable for serving at /.well-known/jwks.json or /auth/jwks so that
     downstream services can verify tokens without calling back to this service.
     """
-    from cryptography.hazmat.primitives.serialization import load_pem_public_key
     from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+    from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
     pub = load_pem_public_key(_PUBLIC_KEY)
     if not isinstance(pub, RSAPublicKey):
@@ -286,14 +289,16 @@ def extract_identity_context(request: Request) -> dict:
     token = auth_header[7:]
     try:
         payload = verify_token(token)
-        context.update({
-            "is_authenticated": True,
-            "role": payload.get("role", "customer"),
-            "customer_id": payload.get("customer_id"),
-            "tenant_id": payload.get("tenant_id", "default"),
-            "clearance_level": payload.get("clearance_level", 1),
-            "department": payload.get("department", "external"),
-        })
+        context.update(
+            {
+                "is_authenticated": True,
+                "role": payload.get("role", "customer"),
+                "customer_id": payload.get("customer_id"),
+                "tenant_id": payload.get("tenant_id", "default"),
+                "clearance_level": payload.get("clearance_level", 1),
+                "department": payload.get("department", "external"),
+            }
+        )
         logger.debug(
             "Verified JWT: role=%s tenant=%s kid=%s",
             context["role"],

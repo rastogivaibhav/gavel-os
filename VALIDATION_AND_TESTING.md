@@ -185,7 +185,7 @@ curl -s http://localhost:18000/live
 ```bash
 curl -X POST http://localhost:18000/external/tool/verdict \
   -H "Content-Type: application/json" \
-  -H "x-machine-key: your-machine-key" \
+  -H "x-machine-key: $GAVEL_MACHINE_KEY" \
   -d '{
     "agent_id": "claude-code-1",
     "tool_call_id": "tc_test_123",

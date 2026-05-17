@@ -47,12 +47,12 @@ This document corrects critical discrepancies between the architectural overview
 ### Linux: eBPF cgroup Connect Hook
 
 **Actual Hook Type:** `CGroupSockAddr` (IPv4 connect interception)  
-**Entry Point:** `ebpf_stub_linux.go` line ~120  
+**Entry Point:** `ebpf_linux.go` line ~120
 **Scope:** Application-level connect attempts, not packet-level  
 **Attachment:** Via `AttachCGroupInet4Connect()` on cgroup hierarchy
 
 ```go
-// Real Linux implementation (enforcer/ebpf_stub_linux.go)
+// Real Linux implementation (enforcer/ebpf_linux.go)
 
 func (e *eBPFEnforcer) AttachProgram(cgroup string) error {
     spec, err := ebpf.NewCollectionSpec()
@@ -1496,7 +1496,7 @@ if err := enforcer.ValidateSetup(); err != nil {
 ## References
 
 **Source Files to Study:**
-- `enforcer/ebpf_stub_linux.go` — Real Linux eBPF runtime
+- `enforcer/ebpf_linux.go` — Real Linux eBPF runtime
 - `control-plane/api/routes/external.py` — Actual API endpoints
 - `control-plane/srp/sdk/impl/postgres_audit_ledger.py` — Ledger implementation
 - `database/migrations/*` — Actual schema

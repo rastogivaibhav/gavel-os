@@ -1,12 +1,13 @@
 """WebSocket endpoint for real-time event streaming."""
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
-from typing import Set
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 router = APIRouter(tags=["WebSocket"])
 
-active_connections: Set[WebSocket] = set()
+active_connections: set[WebSocket] = set()
+
 
 @router.websocket("/ws/events")
 async def websocket_endpoint(websocket: WebSocket):
