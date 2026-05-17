@@ -105,8 +105,7 @@ def test_machine_auth_sets_runtime_machine_role():
         return True, "ok"
 
     with patch("api.control_plane.control_plane_status_from_app", return_value="online"), \
-         patch("api.control_plane.query_route") as mock_qr:
-        mock_qr.opa_engine.check_routing_allowance.side_effect = _fake_check
+         patch("api.routes.query.opa_engine.check_routing_allowance", side_effect=_fake_check):
         evaluate_runtime_decision(
             app,
             action="connect:api.example.com",
@@ -124,6 +123,34 @@ def test_machine_auth_sets_runtime_machine_role():
 
     assert captured_identity.get("role") == "runtime_machine"
     assert captured_identity.get("is_authenticated") is True
+
+
+def test_runtime_decision_does_not_raise_identity_clearance():
+    app = _online_app()
+    captured_identity = {}
+
+    def _fake_check(identity_context, target_endpoint):
+        captured_identity.update(identity_context)
+        return False, "insufficient clearance"
+
+    with patch("api.control_plane.control_plane_status_from_app", return_value="online"), \
+         patch("api.routes.query.opa_engine.check_routing_allowance", side_effect=_fake_check):
+        evaluate_runtime_decision(
+            app,
+            action="connect:restricted.example.com",
+            method="CONNECT",
+            target_tenant_id="default",
+            required_clearance=7,
+            host_id="host-1",
+            agent_id="agent-1",
+            runtime_mode=RuntimeMode.ENFORCE,
+            enforcement_capable=True,
+            runtime_os="linux",
+            runtime_arch="amd64",
+            headers={"x-gavel-machine-key": "test-machine-key-32-bytes-xxxxxxx"},
+        )
+
+    assert captured_identity.get("clearance_level") == 0
 
 
 # ── build_runtime_policy ──────────────────────────────────────────────────────

@@ -2,11 +2,8 @@
 External integration and machine-runtime bridge endpoints.
 """
 
-from __future__ import annotations
-
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -20,7 +17,6 @@ from api.control_plane import (
 from api.middleware.rate_limit import (
     LIMIT_HEARTBEAT,
     LIMIT_POLICY,
-    LIMIT_TELEMETRY,
     LIMIT_VALIDATE,
     limiter,
 )
@@ -43,11 +39,14 @@ from srp.sdk.models import AuditEvent
 router = APIRouter()
 logger = logging.getLogger("sentinel.external")
 
+
 # Decorator helper: no-op when limiter is unavailable
 def _rate_limit(limit_string: str):
     if limiter is None:
+
         def _noop(fn):
             return fn
+
         return _noop
     return limiter.limit(limit_string)
 
@@ -58,8 +57,8 @@ class IngestRequest(BaseModel):
     action: str
     target_system: str
     outcome: str = "SUCCESS"
-    payload_hash: Optional[str] = None
-    actor: Optional[str] = None
+    payload_hash: str | None = None
+    actor: str | None = None
 
 
 class ValidateRequest(BaseModel):
@@ -71,6 +70,7 @@ class ValidateRequest(BaseModel):
 
 class NetworkPolicyRequest(BaseModel):
     """Request for runtime network action policy evaluation."""
+
     action: str  # Target hostname or IP
     method: str = "CONNECT"  # CONNECT | GET | POST | EXECUTE
     host_id: str
@@ -80,6 +80,7 @@ class NetworkPolicyRequest(BaseModel):
 
 class ToolProposalRequest(BaseModel):
     """Request for SRP VerdictEngine tool call proposal evaluation."""
+
     agent_id: str
     tool_call_id: str
     api_ref: str  # e.g., "payments.api"
@@ -87,7 +88,7 @@ class ToolProposalRequest(BaseModel):
     environment: str  # dev, staging, prod
     parameters: dict
     tenant_id: str = "default"
-    user_id: Optional[str] = None
+    user_id: str | None = None
     replay_nonce: str = ""  # 16+ bytes for replay protection
 
 
@@ -118,13 +119,15 @@ async def _append_audit_event(
         target_system=target_system,
         payload_hash=payload_hash,
         outcome=outcome,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
     return await ledger.append(event)
 
 
 async def _broadcast_runtime_event(event: RuntimeEventEnvelope):
-    await telemetry_manager.broadcast({"type": event.event_type.value, "payload": event.model_dump(mode="json")})
+    await telemetry_manager.broadcast(
+        {"type": event.event_type.value, "payload": event.model_dump(mode="json")}
+    )
 
 
 @router.post("/ingest")
@@ -250,8 +253,12 @@ async def runtime_heartbeat(request: Request, payload: MachineHeartbeatRequest):
             runtime_os=payload.runtime_os,
             runtime_arch=payload.runtime_arch,
             target=payload.component,
-            verdict=RuntimeVerdict.INFO if control_plane_status == "online" else RuntimeVerdict.DEGRADED,
-            reason_code="HEARTBEAT_OK" if control_plane_status == "online" else "CONTROL_PLANE_DEGRADED",
+            verdict=RuntimeVerdict.INFO
+            if control_plane_status == "online"
+            else RuntimeVerdict.DEGRADED,
+            reason_code="HEARTBEAT_OK"
+            if control_plane_status == "online"
+            else "CONTROL_PLANE_DEGRADED",
             metadata={
                 "component": payload.component,
                 "status": control_plane_status,
@@ -268,7 +275,9 @@ async def runtime_heartbeat(request: Request, payload: MachineHeartbeatRequest):
         enforcement_capable=payload.enforcement_capable,
         auth_status="authenticated",
         control_plane_status=control_plane_status,
-        reason_code="HEARTBEAT_OK" if control_plane_status == "online" else "CONTROL_PLANE_DEGRADED",
+        reason_code="HEARTBEAT_OK"
+        if control_plane_status == "online"
+        else "CONTROL_PLANE_DEGRADED",
     )
 
 
@@ -319,7 +328,7 @@ async def validate_runtime_action(request: Request, payload: MachineValidateRequ
                 "target_kind": payload.method,
                 "runtime_mode": payload.runtime_mode.value,
                 "enforcement_capable": payload.enforcement_capable,
-                "decision_reason": decision.get("reason", ""),
+                "reason_description": decision.get("reason", ""),
             },
         )
     )
@@ -347,7 +356,9 @@ async def get_runtime_policy(request: Request, payload: MachinePolicyRequest):
             runtime_arch=payload.runtime_arch,
             agent_id=payload.agent_id,
             target=payload.component,
-            verdict=RuntimeVerdict.INFO if policy.reason_code != "CONTROL_PLANE_DEGRADED" else RuntimeVerdict.DEGRADED,
+            verdict=RuntimeVerdict.INFO
+            if policy.reason_code != "CONTROL_PLANE_DEGRADED"
+            else RuntimeVerdict.DEGRADED,
             reason_code=policy.reason_code,
             metadata={
                 "component": payload.component,
@@ -565,12 +576,15 @@ async def evaluate_tool_proposal(request: Request, payload: ToolProposalRequest)
                         parameters=payload.parameters,
                         risk_level="high" if "payment" in payload.api_ref.lower() else "medium",
                     )
-                    logger.info(f"Created escalation {escalation_ticket} for {payload.tool_call_id}")
+                    logger.info(
+                        f"Created escalation {escalation_ticket} for {payload.tool_call_id}"
+                    )
 
                     # Send approval required notification
                     if notification_service:
                         from datetime import timedelta
-                        deadline = datetime.now(timezone.utc) + timedelta(hours=24)
+
+                        deadline = datetime.now(UTC) + timedelta(hours=24)
                         await notification_service.send_approval_required(
                             tenant_id=payload.tenant_id,
                             escalation_id=f"esc_{payload.tool_call_id[:16]}",
@@ -601,7 +615,7 @@ async def evaluate_tool_proposal(request: Request, payload: ToolProposalRequest)
             "escalation_ticket": escalation_ticket,
             "metadata": {
                 "tool_call_id": payload.tool_call_id,
-                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "evaluated_at": datetime.now(UTC).isoformat(),
                 "engine": "srp",
             },
         }

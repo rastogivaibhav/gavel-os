@@ -1,27 +1,28 @@
 """
 setup.py — OpenTelemetry Instrumentation Config
 
-Configures the global TracerProvider, sets up the OTLP Exporter 
-(e.g., Jaeger/Datadog), and provides a helper to instrument the 
+Configures the global TracerProvider, sets up the OTLP Exporter
+(e.g., Jaeger/Datadog), and provides a helper to instrument the
 FastAPI application and its backing services.
 """
 
-import os
 import logging
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+import os
+
 # Note: asyncpg and redis instrumentors need to be called on their respective connection pools
 from fastapi import FastAPI
-from opentelemetry import metrics
-from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry import metrics, trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.prometheus import PrometheusMetricReader
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 logger = logging.getLogger("sentinel.telemetry")
+
 
 def setup_telemetry(app: FastAPI, service_name: str = "sentinel-recipe-engine"):
     """
@@ -35,7 +36,7 @@ def setup_telemetry(app: FastAPI, service_name: str = "sentinel-recipe-engine"):
 
     # 2. Configure the Global Tracer Provider
     provider = TracerProvider(resource=resource)
-    
+
     # 3. Add Exporters
     if env == "production" or os.getenv("ENABLE_OTLP", "false").lower() == "true":
         # Export to Jaeger / OTEL Collector
@@ -62,24 +63,27 @@ def setup_telemetry(app: FastAPI, service_name: str = "sentinel-recipe-engine"):
     # 4. Instrument Frameworks
     FastAPIInstrumentor.instrument_app(app)
     HTTPXClientInstrumentor().instrument()
-    
+
     # Optional extensions based on what is available in the environment
     try:
         from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
+
         AsyncPGInstrumentor().instrument()
     except ImportError:
         logger.warning("AsyncPG instrumentor not available")
-        
+
     try:
         from opentelemetry.instrumentation.redis import RedisInstrumentor
+
         RedisInstrumentor().instrument()
     except ImportError:
         logger.warning("Redis instrumentor not available")
-        
+
     try:
         from opentelemetry.instrumentation.logging import LoggingInstrumentor
+
         LoggingInstrumentor().instrument(set_logging_format=True)
     except ImportError:
         logger.warning("Logging instrumentor not available")
-    
+
     logger.info("OpenTelemetry instrumented FastAPI, HTTPX, Postgres, Redis, and Logging")

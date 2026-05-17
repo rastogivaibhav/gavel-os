@@ -39,6 +39,7 @@ from api.envoy_ext_auth_pb2_grpc import (
 
 try:
     import grpc
+
     GRPC_AVAILABLE = True
 except ImportError:
     GRPC_AVAILABLE = False
@@ -65,7 +66,8 @@ def get_grpc_authz_status() -> str:
 
 # ── TLS credential builder ────────────────────────────────────────────────────
 
-def _build_grpc_credentials() -> "grpc.ServerCredentials | None":
+
+def _build_grpc_credentials() -> grpc.ServerCredentials | None:
     """
     Build gRPC server credentials from environment configuration.
 
@@ -129,31 +131,36 @@ def _build_grpc_credentials() -> "grpc.ServerCredentials | None":
     return credentials
 
 
-def _generate_dev_tls_credentials() -> "grpc.ServerCredentials":
+def _generate_dev_tls_credentials() -> grpc.ServerCredentials:
     """Generate a self-signed RSA certificate for development gRPC TLS."""
     import datetime
+
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
     from cryptography.x509.oid import NameOID
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, "gavel-grpc-dev"),
-    ])
+    subject = issuer = x509.Name(
+        [
+            x509.NameAttribute(NameOID.COMMON_NAME, "gavel-grpc-dev"),
+        ]
+    )
     cert = (
         x509.CertificateBuilder()
         .subject_name(subject)
         .issuer_name(issuer)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.now(datetime.timezone.utc))
-        .not_valid_after(datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=365))
+        .not_valid_before(datetime.datetime.now(datetime.UTC))
+        .not_valid_after(datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=365))
         .add_extension(
-            x509.SubjectAlternativeName([
-                x509.DNSName("localhost"),
-                x509.DNSName("gavel-control-plane"),
-            ]),
+            x509.SubjectAlternativeName(
+                [
+                    x509.DNSName("localhost"),
+                    x509.DNSName("gavel-control-plane"),
+                ]
+            ),
             critical=False,
         )
         .sign(key, hashes.SHA256())
@@ -178,6 +185,7 @@ def _generate_dev_tls_credentials() -> "grpc.ServerCredentials":
 
 # ── Servicer ──────────────────────────────────────────────────────────────────
 
+
 class GavelAuthorizationServicer(AuthorizationServicer):
     def __init__(self, app):
         self.app = app
@@ -186,7 +194,9 @@ class GavelAuthorizationServicer(AuthorizationServicer):
         try:
             http_request = request.attributes.request
             headers = {key.lower(): value for key, value in http_request.headers.items()}
-            host = http_request.host or headers.get(":authority") or headers.get("host") or "unknown"
+            host = (
+                http_request.host or headers.get(":authority") or headers.get("host") or "unknown"
+            )
             method = http_request.method or "CONNECT"
             path = http_request.path or "/"
             action = f"{host}{path}" if path and path != "/" else host
@@ -237,6 +247,7 @@ class GavelAuthorizationServicer(AuthorizationServicer):
 
 # ── Server lifecycle ──────────────────────────────────────────────────────────
 
+
 def serve_grpc(app) -> None:
     if not GRPC_AVAILABLE:
         logger.warning("grpcio not installed — Envoy ext_authz will not function.")
@@ -250,7 +261,7 @@ def serve_grpc(app) -> None:
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=int(os.getenv("GRPC_MAX_WORKERS", "10"))),
         options=[
-            ("grpc.max_receive_message_length", 1 * 1024 * 1024),   # 1 MB
+            ("grpc.max_receive_message_length", 1 * 1024 * 1024),  # 1 MB
             ("grpc.max_send_message_length", 1 * 1024 * 1024),
             ("grpc.keepalive_time_ms", 30_000),
             ("grpc.keepalive_timeout_ms", 10_000),

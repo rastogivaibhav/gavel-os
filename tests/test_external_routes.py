@@ -47,7 +47,8 @@ def _bearer_headers() -> dict:
 
 
 @pytest_asyncio.fixture
-async def client():
+async def client(monkeypatch):
+    monkeypatch.setenv("GAVEL_MACHINE_KEY", "test-machine-key-32-bytes-xxxxxxx")
     app = _make_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
@@ -108,9 +109,9 @@ async def test_runtime_validate_requires_machine_auth(client):
 @pytest.mark.asyncio
 async def test_runtime_validate_allow(client):
     with patch("api.control_plane.control_plane_status_from_app", return_value="online"), \
-         patch("api.control_plane.query_route") as mock_qr, \
+         patch("api.routes.query.opa_engine.check_routing_allowance") as mock_check, \
          patch("api.routes.external.telemetry_manager.broadcast", new_callable=AsyncMock):
-        mock_qr.opa_engine.check_routing_allowance.return_value = (True, "Authorized by OPA")
+        mock_check.return_value = (True, "Authorized by OPA")
         resp = await client.post(
             "/external/runtime/validate",
             json={
@@ -130,9 +131,9 @@ async def test_runtime_validate_allow(client):
 @pytest.mark.asyncio
 async def test_runtime_validate_deny(client):
     with patch("api.control_plane.control_plane_status_from_app", return_value="online"), \
-         patch("api.control_plane.query_route") as mock_qr, \
+         patch("api.routes.query.opa_engine.check_routing_allowance") as mock_check, \
          patch("api.routes.external.telemetry_manager.broadcast", new_callable=AsyncMock):
-        mock_qr.opa_engine.check_routing_allowance.return_value = (False, "Access Denied")
+        mock_check.return_value = (False, "Access Denied")
         resp = await client.post(
             "/external/runtime/validate",
             json={

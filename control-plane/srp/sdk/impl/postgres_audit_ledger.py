@@ -16,8 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from srp.sdk.models import AuditEvent, ChainIntegrityReport, LedgerEntry, LedgerQuery
 
@@ -98,7 +97,7 @@ class PostgresAuditLedgerClient:
             event=event,
         )
 
-    async def query(self, query: LedgerQuery) -> List[LedgerEntry]:
+    async def query(self, query: LedgerQuery) -> list[LedgerEntry]:
         """
         Query ledger entries within a date range, optionally filtered by actor.
         """
@@ -138,7 +137,7 @@ class PostgresAuditLedgerClient:
                     query.limit,
                 )
 
-        entries: List[LedgerEntry] = []
+        entries: list[LedgerEntry] = []
         for row in rows:
             raw = row["event_json"]
             event_data = raw if isinstance(raw, dict) else json.loads(raw)
@@ -146,7 +145,7 @@ class PostgresAuditLedgerClient:
             try:
                 ts = datetime.fromisoformat(ts_raw)
             except (ValueError, TypeError):
-                ts = datetime.now(timezone.utc)
+                ts = datetime.now(UTC)
 
             event = AuditEvent(
                 recipe_id=event_data.get("recipe_id", ""),
@@ -198,13 +197,17 @@ class PostgresAuditLedgerClient:
                 end_date,
             )
 
-        corrupted: List[int] = []
+        corrupted: list[int] = []
         for row in rows:
             raw = row["event_json"]
-            event_json = raw if isinstance(raw, str) else json.dumps(
-                raw if isinstance(raw, dict) else json.loads(raw),
-                sort_keys=True,
-                separators=(",", ":"),
+            event_json = (
+                raw
+                if isinstance(raw, str)
+                else json.dumps(
+                    raw if isinstance(raw, dict) else json.loads(raw),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
             )
             expected = _compute_hash(row["previous_hash"], event_json)
             if expected != row["current_hash"]:

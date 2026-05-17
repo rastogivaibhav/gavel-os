@@ -19,13 +19,13 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Callable
 
 from fastapi import Request
 
 logger = logging.getLogger("gavel.rate_limit")
 
 # ── Key function: identify callers by host-id, fall back to IP ───────────────
+
 
 def _enforcer_key(request: Request) -> str:
     host_id = request.headers.get("x-gavel-host-id", "").strip()
@@ -41,13 +41,14 @@ def _enforcer_key(request: Request) -> str:
 
 # ── Limit strings from env ────────────────────────────────────────────────────
 
-LIMIT_VALIDATE  = os.getenv("RATE_LIMIT_VALIDATE",  "200/minute")
+LIMIT_VALIDATE = os.getenv("RATE_LIMIT_VALIDATE", "200/minute")
 LIMIT_HEARTBEAT = os.getenv("RATE_LIMIT_HEARTBEAT", "4/minute")
 LIMIT_TELEMETRY = os.getenv("RATE_LIMIT_TELEMETRY", "300/minute")
-LIMIT_POLICY    = os.getenv("RATE_LIMIT_POLICY",    "30/minute")
+LIMIT_POLICY = os.getenv("RATE_LIMIT_POLICY", "30/minute")
 
 
 # ── Limiter factory ───────────────────────────────────────────────────────────
+
 
 def build_limiter():
     """
@@ -71,7 +72,9 @@ def build_limiter():
             logger.info("Rate limiter using Redis storage (%s)", redis_url.split("@")[-1])
             return limiter
         except Exception as exc:
-            logger.warning("Redis rate limit storage unavailable (%s) — falling back to memory", exc)
+            logger.warning(
+                "Redis rate limit storage unavailable (%s) — falling back to memory", exc
+            )
 
     limiter = Limiter(key_func=_enforcer_key)
     logger.info("Rate limiter using in-memory storage (single-instance only)")

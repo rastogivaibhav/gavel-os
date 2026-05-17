@@ -1,7 +1,8 @@
 """Escalation workflow endpoints."""
 
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Request
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.dependencies import get_tenant_context
 from models.escalation import EscalationApprove, EscalationStatus
@@ -25,10 +26,7 @@ def set_escalation_service(service: EscalationService):
 async def get_escalation_service() -> EscalationService:
     """Dependency to get escalation service."""
     if not _escalation_service:
-        raise HTTPException(
-            status_code=503,
-            detail="Escalation service not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Escalation service not initialized")
     return _escalation_service
 
 
@@ -39,16 +37,10 @@ async def get_escalation_status(
     service: EscalationService = Depends(get_escalation_service),
 ) -> EscalationStatus:
     """Get status of an escalation."""
-    status = await service.get_escalation_status(
-        tenant_context.tenant_id,
-        escalation_id
-    )
+    status = await service.get_escalation_status(tenant_context.tenant_id, escalation_id)
 
     if not status:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Escalation {escalation_id} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Escalation {escalation_id} not found")
 
     return status
 
@@ -64,8 +56,7 @@ async def approve_escalation(
     """Approve or deny an escalation."""
     if not tenant_context.is_authenticated:
         raise HTTPException(
-            status_code=401,
-            detail="Authentication required to approve escalations"
+            status_code=401, detail="Authentication required to approve escalations"
         )
 
     success, message = await service.approve_escalation(
@@ -73,14 +64,11 @@ async def approve_escalation(
         escalation_id,
         tenant_context.user_id or "unknown",
         decision.decision,
-        decision.reason
+        decision.reason,
     )
 
     if not success:
-        raise HTTPException(
-            status_code=400,
-            detail=message
-        )
+        raise HTTPException(status_code=400, detail=message)
 
     # Send notification about approval/denial
     notification_service = getattr(request.app.state, "notification_service", None)
@@ -88,8 +76,7 @@ async def approve_escalation(
         try:
             # Get escalation details to include in notification
             esc_status = await service.get_escalation_status(
-                tenant_context.tenant_id,
-                escalation_id
+                tenant_context.tenant_id, escalation_id
             )
 
             if esc_status:
@@ -98,7 +85,9 @@ async def approve_escalation(
                         tenant_id=tenant_context.tenant_id,
                         escalation_id=escalation_id,
                         ticket_number=esc_status.get("ticket_number", "UNKNOWN"),
-                        tool_call_id=esc_status.get("ticket_number", "").split("-")[1] if "-" in esc_status.get("ticket_number", "") else "UNKNOWN",
+                        tool_call_id=esc_status.get("ticket_number", "").split("-")[1]
+                        if "-" in esc_status.get("ticket_number", "")
+                        else "UNKNOWN",
                         operation="unknown",
                         agent_id="unknown",
                         approver_id=tenant_context.user_id or "unknown",
@@ -109,7 +98,9 @@ async def approve_escalation(
                         tenant_id=tenant_context.tenant_id,
                         escalation_id=escalation_id,
                         ticket_number=esc_status.get("ticket_number", "UNKNOWN"),
-                        tool_call_id=esc_status.get("ticket_number", "").split("-")[1] if "-" in esc_status.get("ticket_number", "") else "UNKNOWN",
+                        tool_call_id=esc_status.get("ticket_number", "").split("-")[1]
+                        if "-" in esc_status.get("ticket_number", "")
+                        else "UNKNOWN",
                         operation="unknown",
                         agent_id="unknown",
                         approver_id=tenant_context.user_id or "unknown",

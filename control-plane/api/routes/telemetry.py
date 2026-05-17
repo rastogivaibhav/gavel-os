@@ -6,7 +6,6 @@ import logging
 import os
 import queue
 from dataclasses import dataclass, field
-from typing import List
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -18,11 +17,14 @@ from api.runtime_contract import RuntimeEventEnvelope
 router = APIRouter()
 logger = logging.getLogger("sentinel.telemetry")
 
+
 # Decorator helper: no-op when limiter is unavailable
 def _rate_limit(limit_string: str):
     if limiter is None:
+
         def _noop(fn):
             return fn
+
         return _noop
     return limiter.limit(limit_string)
 
@@ -35,7 +37,7 @@ class TelemetrySubscriber:
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: List[TelemetrySubscriber] = []
+        self.active_connections: list[TelemetrySubscriber] = []
 
     async def connect(self, websocket: WebSocket) -> TelemetrySubscriber:
         await websocket.accept()
@@ -46,7 +48,11 @@ class ConnectionManager:
 
     def disconnect(self, websocket: WebSocket):
         subscriber = next(
-            (candidate for candidate in self.active_connections if candidate.websocket == websocket),
+            (
+                candidate
+                for candidate in self.active_connections
+                if candidate.websocket == websocket
+            ),
             None,
         )
         if subscriber is not None:
@@ -73,7 +79,10 @@ manager = ConnectionManager()
 def _telemetry_websocket_authenticated(websocket: WebSocket) -> bool:
     # Dev mode: allow all WebSocket connections without credentials so the
     # dashboard UI works out of the box during local development.
-    if os.getenv("ENV") == "development" and os.getenv("ALLOW_INSECURE_DEV_AUTH", "false").lower() == "true":
+    if (
+        os.getenv("ENV") == "development"
+        and os.getenv("ALLOW_INSECURE_DEV_AUTH", "false").lower() == "true"
+    ):
         return True
 
     headers = {key.lower(): value for key, value in websocket.headers.items()}
@@ -113,7 +122,7 @@ async def telemetry_endpoint(websocket: WebSocket):
         while True:
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=0.25)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
             while True:

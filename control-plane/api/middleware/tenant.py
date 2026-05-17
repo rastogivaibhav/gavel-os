@@ -1,7 +1,7 @@
 """Tenant context middleware for multi-tenant isolation."""
 
 import uuid
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -13,9 +13,7 @@ from models.tenant import TenantContext
 class TenantContextMiddleware(BaseHTTPMiddleware):
     """Inject TenantContext into each request from JWT claims."""
 
-    async def dispatch(
-        self, request: Request, call_next: Callable
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Extract tenant context from JWT and inject into request state."""
         # Extract identity from JWT
         identity = extract_identity_context(request)

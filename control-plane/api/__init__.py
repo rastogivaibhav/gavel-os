@@ -1,1 +1,1 @@
-﻿"""Gavel OS — Control Plane API Package."""
+"""Gavel OS — Control Plane API Package."""

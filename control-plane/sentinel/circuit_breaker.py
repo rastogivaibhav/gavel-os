@@ -1,16 +1,17 @@
 """Circuit breaker pattern for handling service failures."""
 
 import logging
-import time
-from datetime import datetime, timedelta, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Callable, Any
+from typing import Any
 
 logger = logging.getLogger("sentinel.circuit_breaker")
 
 
 class CircuitState(str, Enum):
     """Circuit breaker states."""
+
     CLOSED = "closed"  # Normal operation
     OPEN = "open"  # Failing, requests rejected
     HALF_OPEN = "half_open"  # Testing if service recovered
@@ -58,7 +59,7 @@ class CircuitBreaker:
             result = func(*args, **kwargs)
             self._on_success()
             return result
-        except self.expected_exception as e:
+        except self.expected_exception:
             self._on_failure()
             raise
 
@@ -72,7 +73,7 @@ class CircuitBreaker:
     def _on_failure(self):
         """Handle failed call."""
         self.failure_count += 1
-        self.last_failure_time = datetime.now(timezone.utc)
+        self.last_failure_time = datetime.now(UTC)
 
         logger.warning(
             f"Circuit breaker {self.name} failure #{self.failure_count}/{self.failure_threshold}"
@@ -80,7 +81,7 @@ class CircuitBreaker:
 
         if self.failure_count >= self.failure_threshold:
             self.state = CircuitState.OPEN
-            self.opened_at = datetime.now(timezone.utc)
+            self.opened_at = datetime.now(UTC)
             logger.error(f"Circuit breaker {self.name} opened after {self.failure_count} failures")
 
     def _should_attempt_recovery(self) -> bool:
@@ -88,7 +89,7 @@ class CircuitBreaker:
         if not self.opened_at:
             return False
 
-        elapsed = (datetime.now(timezone.utc) - self.opened_at).total_seconds()
+        elapsed = (datetime.now(UTC) - self.opened_at).total_seconds()
         return elapsed >= self.recovery_timeout_seconds
 
     def get_status(self) -> dict:

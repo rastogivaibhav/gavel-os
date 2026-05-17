@@ -5,8 +5,8 @@ Shared control-plane decision helpers used by REST and gRPC entry points.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from ipaddress import IPv4Address
-from typing import Mapping
 
 from fastapi import HTTPException, Request
 
@@ -83,7 +83,9 @@ def evaluate_runtime_decision(
     from api.routes import query as query_route
 
     control_plane_status = control_plane_status_from_app(app)
-    normalized_runtime_mode = runtime_mode.value if isinstance(runtime_mode, RuntimeMode) else runtime_mode
+    normalized_runtime_mode = (
+        runtime_mode.value if isinstance(runtime_mode, RuntimeMode) else runtime_mode
+    )
     if control_plane_status != "online":
         return {
             "is_allowed": False,
@@ -111,7 +113,7 @@ def evaluate_runtime_decision(
                 "role": "runtime_machine",
                 "customer_id": host_id,
                 "tenant_id": target_tenant_id,
-                "clearance_level": max(identity_context.get("clearance_level", 0), required_clearance),
+                "clearance_level": identity_context.get("clearance_level", 0),
                 "department": "runtime",
             }
         )
@@ -120,7 +122,7 @@ def evaluate_runtime_decision(
         {
             "customer_id": identity_context.get("customer_id") or host_id,
             "tenant_id": target_tenant_id,
-            "clearance_level": max(identity_context.get("clearance_level", 0), required_clearance),
+            "clearance_level": identity_context.get("clearance_level", 0),
             "department": "runtime",
         }
     )
@@ -186,7 +188,9 @@ def build_runtime_policy(
     enforcement_capable: bool,
 ) -> MachinePolicyResponse:
     control_plane_status = control_plane_status_from_app(app)
-    normalized_runtime_mode = runtime_mode.value if isinstance(runtime_mode, RuntimeMode) else runtime_mode
+    normalized_runtime_mode = (
+        runtime_mode.value if isinstance(runtime_mode, RuntimeMode) else runtime_mode
+    )
     normalized_runtime_os = runtime_os.value if isinstance(runtime_os, RuntimeOS) else runtime_os
 
     monitored_pids = _int_csv_env("GAVEL_RUNTIME_MONITORED_PIDS")

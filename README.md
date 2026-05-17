@@ -2,7 +2,7 @@
 
 # Gavel
 
-### OS-level enforcement for AI agents. The trust boundary that application middleware cannot provide.
+### Experimental OS/runtime enforcement for AI agents.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.0-brightgreen)](CHANGELOG.md)
@@ -31,7 +31,7 @@ Microsoft's own documentation is explicit about this:
 
 > *"This toolkit provides application-level governance (Python middleware), not OS kernel-level isolation. The policy engine and agents run in the same process."*
 
-**Gavel enforces at the OS level — below the application trust boundary — where no userspace process can reach it.**
+**Gavel explores enforcement below the application trust boundary**, where policy decisions can be evaluated outside the agent process instead of relying only on in-process middleware.
 
 ```
 Without Gavel                          With Gavel
@@ -51,15 +51,15 @@ Agent ──► [Middleware] ──► Action      Agent ──► Action attemp
 
 ## What Gavel is
 
-Gavel is an **OS-level enforcement runtime** for AI agents. It intercepts agent network activity and process behavior at the kernel before any action reaches the network, then evaluates it against a central policy engine.
+Gavel is an **experimental OS/runtime enforcement prototype** for AI agents. It connects host-level runtime signals to a central policy engine, with platform support at different maturity levels.
 
-**Linux** — eBPF cgroup socket programs attach to the cgroup hierarchy. All outbound connections from monitored processes pass through the hook before reaching the network stack. No userspace bypass is possible.
+**Linux** — partial enforcement prototype using eBPF cgroup socket programs and centrally synced runtime policy.
 
-**Windows** — ETW (Event Tracing for Windows) monitors process creation. WFP (Windows Filtering Platform) applies outbound block rules at the network stack level. DNS-resolved hostnames are periodically refreshed.
+**Windows** — experimental ETW process monitoring plus WFP outbound block-rule integration.
 
 **macOS** — Audit-only mode. The runtime connects to the control plane, receives policy, and reports events. System Extension enforcement is on the roadmap.
 
-Gavel is **not** a prompt guardrail, LLM content filter, or replacement for application-layer governance. It is the enforcement layer that sits below all of that — the last line that cannot be bypassed.
+Gavel is **not** production-ready kernel isolation, a prompt guardrail, an LLM content filter, or a replacement for application-layer governance. Treat this repository as a public experimental prototype while the enforcement engines mature.
 
 ---
 
@@ -80,7 +80,7 @@ Gavel is **not** a prompt guardrail, LLM content filter, or replacement for appl
 │  └───────┼──────────────────────────────────────────────────────────┘ │
 │          │ network attempt                                             │
 │  ┌───────▼──────────────────────────────────────────────────────────┐ │
-│  │  Kernel / OS Layer  [cannot be bypassed from userspace]          │ │
+│  │  Kernel / OS Layer  [experimental enforcement]                   │ │
 │  │                                                                  │ │
 │  │  Linux:   eBPF cgroup socket hook (cilium/ebpf)                 │ │
 │  │  Windows: ETW process monitor + WFP network filter              │ │
@@ -259,12 +259,12 @@ $env:GAVEL_MACHINE_KEY = "<your-machine-key>"
 
 | OS | Architecture | Mode | Status |
 |---|---|---|---|
-| Linux | `amd64` | `enforce` | ✅ GA |
-| Linux | `arm64` | `enforce` | ✅ GA |
-| Windows | `amd64` | `enforce` | ✅ GA |
-| Windows | `arm64` | `enforce` | ✅ GA |
-| macOS | `amd64` | `audit_only` | ✅ GA |
-| macOS | `arm64` | `audit_only` | ✅ GA |
+| Linux | `amd64` | `enforce` | Experimental |
+| Linux | `arm64` | `enforce` | Experimental |
+| Windows | `amd64` | `enforce` | Experimental |
+| Windows | `arm64` | `enforce` | Experimental |
+| macOS | `amd64` | `audit_only` | Experimental |
+| macOS | `arm64` | `audit_only` | Experimental |
 
 macOS System Extension enforcement (full block capability) is planned for v1.1.
 
@@ -376,7 +376,7 @@ See [docs/deployment/kubernetes.md](docs/deployment/kubernetes.md) and [docs/dep
 
 ## Integration with Microsoft Agent Governance Toolkit
 
-Gavel is designed to work **alongside** AGT, not replace it. AGT governs at the application layer — fast, framework-native, excellent for policy logic. Gavel enforces at the OS layer — kernel-level, cannot be bypassed from userspace.
+Gavel is designed to work **alongside** AGT, not replace it. AGT governs at the application layer — fast, framework-native, excellent for policy logic. Gavel is exploring OS/runtime enforcement below that layer, with Linux and Windows currently experimental and macOS audit-only.
 
 ```python
 # AGT handles application-layer policy

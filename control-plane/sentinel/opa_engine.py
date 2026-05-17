@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Dict, Tuple
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
@@ -22,7 +22,11 @@ class OPAValidationEngine:
         """Initializes the OPA endpoint configuration."""
         self.host = host
         self.port = port
-        self.base_url = os.getenv("OPA_URL", f"http://{host}:{port}").rstrip("/")
+        env_base_url = os.getenv("OPA_URL", "").strip()
+        explicit_endpoint = host != "localhost" or port != 8181
+        self.base_url = (
+            f"http://{host}:{port}" if explicit_endpoint or not env_base_url else env_base_url
+        ).rstrip("/")
         self.package_path = os.getenv("OPA_PACKAGE_PATH", "sentinel/api/authz").strip("/")
         self.timeout_seconds = float(os.getenv("OPA_TIMEOUT_SECONDS", "2.0"))
 
@@ -34,8 +38,9 @@ class OPAValidationEngine:
             expected_exception=Exception,
         )
 
-    def _request_json(self, path: str, payload: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def _request_json(self, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         """Make HTTP request to OPA with circuit breaker protection."""
+
         def _make_request():
             target_url = urljoin(f"{self.base_url}/", path.lstrip("/"))
             body = None
@@ -44,7 +49,12 @@ class OPAValidationEngine:
                 body = json.dumps(payload).encode("utf-8")
                 headers["Content-Type"] = "application/json"
 
-            request = Request(target_url, data=body, headers=headers, method="POST" if payload is not None else "GET")
+            request = Request(
+                target_url,
+                data=body,
+                headers=headers,
+                method="POST" if payload is not None else "GET",
+            )
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 raw = response.read().decode("utf-8")
                 return json.loads(raw) if raw else {}
@@ -65,10 +75,10 @@ class OPAValidationEngine:
 
     def check_routing_allowance(
         self,
-        identity_context: Dict[str, Any],
-        target_endpoint: Dict[str, Any],
+        identity_context: dict[str, Any],
+        target_endpoint: dict[str, Any],
         tenant_id: str | None = None,
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """
         Evaluate if the current identity is authorized to invoke the target endpoint.
 
@@ -111,7 +121,7 @@ class OPAValidationEngine:
         runtime_os: str,
         agent_id: str,
         tenant_id: str | None = None,
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """
         Evaluate network-level runtime policy (sentinel.runtime.policy).
 

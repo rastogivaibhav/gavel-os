@@ -6,11 +6,12 @@
 #include <linux/tcp.h>
 #include <arpa/inet.h>
 
-/* 
- * Gavel v3.0 Kernel Shield: Socket Redirector
- * This eBPF program hooks into the TCP connect state.
- * Any connection from a process identified as an "AI Agent"
- * is tagged and forced into the Gavel Governance Proxy.
+/*
+ * Reference eBPF C program for future bpf2go generation.
+ *
+ * The shipping Linux prototype currently builds equivalent cilium/ebpf
+ * instructions at runtime in ebpf_linux.go. Keep this file as design reference
+ * until generated objects replace the runtime-generated loader.
  */
 
 struct {
@@ -37,7 +38,7 @@ int gavel_redirect_handler(struct bpf_sock_ops *skops)
              * instead of its original destination.
              */
             
-            // Placeholder: Log the interception
+            // Reference-only: log the interception in this C version.
             bpf_printk("Gavel Shield: Intercepting connection from Monitored PID %d\n", pid);
             
             /* 

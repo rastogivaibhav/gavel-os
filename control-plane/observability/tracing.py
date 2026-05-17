@@ -1,20 +1,23 @@
 """OpenTelemetry tracing setup for Gavel."""
 
-from typing import Optional
+import os
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-import os
+
+try:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+except ImportError:
+    OTLPSpanExporter = None
 
 # Get the global tracer provider
-_tracer_provider: Optional[TracerProvider] = None
+_tracer_provider: TracerProvider | None = None
 
 
 def initialize_tracing(
     service_name: str = "gavel-control-plane",
-    otel_exporter_otlp_endpoint: Optional[str] = None,
+    otel_exporter_otlp_endpoint: str | None = None,
 ) -> trace.TracerProvider:
     """Initialize OpenTelemetry tracing with OTLP exporter."""
     global _tracer_provider
@@ -25,7 +28,7 @@ def initialize_tracing(
     # Get endpoint from environment or parameter
     endpoint = otel_exporter_otlp_endpoint or os.getenv(
         "OTEL_EXPORTER_OTLP_ENDPOINT",
-        "grpc://localhost:4317"  # Default to local Jaeger
+        "grpc://localhost:4317",  # Default to local Jaeger
     )
 
     # Create TracerProvider
@@ -33,6 +36,8 @@ def initialize_tracing(
 
     # Add OTLP exporter
     try:
+        if OTLPSpanExporter is None:
+            raise RuntimeError("OTLP exporter package is not installed or is incompatible")
         otlp_exporter = OTLPSpanExporter(endpoint=endpoint)
         tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
     except Exception as e:
@@ -54,7 +59,7 @@ def get_tracer(name: str) -> trace.Tracer:
 class TracingContext:
     """Context manager for creating spans."""
 
-    def __init__(self, tracer: trace.Tracer, name: str, attributes: Optional[dict] = None):
+    def __init__(self, tracer: trace.Tracer, name: str, attributes: dict | None = None):
         self.tracer = tracer
         self.name = name
         self.attributes = attributes or {}

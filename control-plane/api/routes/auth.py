@@ -1,7 +1,8 @@
 """Authentication routes."""
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel
 
 logger = logging.getLogger("sentinel.auth")
@@ -25,30 +26,34 @@ class TokenResponse(BaseModel):
 
 @router.post("/token", response_model=TokenResponse)
 async def get_token(request: TokenRequest):
-    """Get authentication token.
+    """Legacy credential endpoint.
 
-    This is a placeholder endpoint. In production, this would validate
-    credentials and return a JWT token.
+    Password-based token minting is intentionally disabled. Use the canonical
+    ``POST /auth/token`` endpoint in ``api.main`` with the admin minting secret
+    for custom claims, or with an empty body for the fixed development token.
     """
     logger.info(f"Token request for user: {request.username}")
-
-    # Placeholder: in production, validate credentials and issue JWT
-    return TokenResponse(
-        access_token="placeholder-token",
-        token_type="bearer",
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Password-based token minting is disabled; use POST /auth/token.",
     )
 
 
 @router.get("/verify")
-async def verify_token(authorization: str):
-    """Verify authentication token.
-
-    This is a placeholder endpoint. In production, this would validate
-    the JWT token signature and claims.
-    """
+async def verify_token(authorization: str = Header("", alias="Authorization")):
+    """Verify a bearer token with the canonical JWT verifier."""
     if not authorization:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     logger.info("Token verification requested")
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    return {"valid": True, "message": "Token is valid"}
+    try:
+        from auth.jwt_handler import verify_token as _verify_token
+
+        claims = _verify_token(authorization[7:])
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED) from exc
+
+    return {"valid": True, "claims": claims}

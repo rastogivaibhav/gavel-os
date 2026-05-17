@@ -3,8 +3,7 @@
 import json
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple, List
+from datetime import UTC, datetime, timedelta
 
 logger = logging.getLogger("sentinel.escalation")
 
@@ -34,7 +33,7 @@ class EscalationService:
         """
         escalation_id = f"esc_{uuid.uuid4().hex[:16]}"
         ticket_number = f"ESC-{tool_call_id[:20]}"
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         deadline = now + timedelta(hours=24)
 
         try:
@@ -47,9 +46,20 @@ class EscalationService:
                      deadline, parameters, risk_level)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                     """,
-                    escalation_id, tenant_id, tool_call_id, agent_id, api_ref,
-                    operation, environment, "pending", ticket_number,
-                    now, now, deadline, json.dumps(parameters), risk_level
+                    escalation_id,
+                    tenant_id,
+                    tool_call_id,
+                    agent_id,
+                    api_ref,
+                    operation,
+                    environment,
+                    "pending",
+                    ticket_number,
+                    now,
+                    now,
+                    deadline,
+                    json.dumps(parameters),
+                    risk_level,
                 )
             logger.info(f"Created escalation {ticket_number} for {tool_call_id}")
         except Exception as e:
@@ -64,8 +74,8 @@ class EscalationService:
         escalation_id: str,
         approver_id: str,
         decision: str,
-        reason: Optional[str] = None,
-    ) -> Tuple[bool, str]:
+        reason: str | None = None,
+    ) -> tuple[bool, str]:
         """Record approval decision on escalation.
 
         Returns:
@@ -78,8 +88,14 @@ class EscalationService:
             async with self.db_pool.acquire() as conn:
                 # Update escalation status
                 await conn.execute(
-                    "UPDATE escalations SET status = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3",
-                    decision, escalation_id, tenant_id
+                    """
+                    UPDATE escalations
+                    SET status = $1, updated_at = NOW()
+                    WHERE id = $2 AND tenant_id = $3
+                    """,
+                    decision,
+                    escalation_id,
+                    tenant_id,
                 )
 
                 # Record approval decision
@@ -90,7 +106,12 @@ class EscalationService:
                     (id, escalation_id, tenant_id, approver_id, decision, reason, created_at)
                     VALUES ($1, $2, $3, $4, $5, $6, NOW())
                     """,
-                    approval_id, escalation_id, tenant_id, approver_id, decision, reason
+                    approval_id,
+                    escalation_id,
+                    tenant_id,
+                    approver_id,
+                    decision,
+                    reason,
                 )
             logger.info(f"Escalation {escalation_id} {decision} by {approver_id}")
             return (True, f"Escalation marked as {decision}")
@@ -102,13 +123,14 @@ class EscalationService:
         self,
         tenant_id: str,
         escalation_id: str,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Get current status of escalation."""
         try:
             async with self.db_pool.acquire() as conn:
                 esc = await conn.fetchrow(
                     "SELECT * FROM escalations WHERE id = $1 AND tenant_id = $2",
-                    escalation_id, tenant_id
+                    escalation_id,
+                    tenant_id,
                 )
 
                 if not esc:
@@ -116,8 +138,12 @@ class EscalationService:
 
                 # Get approvals
                 approvals = await conn.fetch(
-                    "SELECT approver_id, decision, reason, created_at FROM escalation_approvals WHERE escalation_id = $1",
-                    escalation_id
+                    """
+                    SELECT approver_id, decision, reason, created_at
+                    FROM escalation_approvals
+                    WHERE escalation_id = $1
+                    """,
+                    escalation_id,
                 )
 
                 return {
@@ -132,13 +158,19 @@ class EscalationService:
             logger.error(f"Failed to get escalation status: {e}")
             return None
 
-    async def get_pending_escalations(self, tenant_id: str) -> List[dict]:
+    async def get_pending_escalations(self, tenant_id: str) -> list[dict]:
         """Get all pending escalations for a tenant."""
         try:
             async with self.db_pool.acquire() as conn:
                 rows = await conn.fetch(
-                    "SELECT id, ticket_number, tool_call_id, agent_id, deadline FROM escalations WHERE tenant_id = $1 AND status = $2 ORDER BY created_at DESC",
-                    tenant_id, "pending"
+                    """
+                    SELECT id, ticket_number, tool_call_id, agent_id, deadline
+                    FROM escalations
+                    WHERE tenant_id = $1 AND status = $2
+                    ORDER BY created_at DESC
+                    """,
+                    tenant_id,
+                    "pending",
                 )
                 return [dict(r) for r in rows]
         except Exception as e:
@@ -155,7 +187,8 @@ class EscalationService:
                     SET status = $1, updated_at = NOW()
                     WHERE status = $2 AND deadline < NOW()
                     """,
-                    "expired", "pending"
+                    "expired",
+                    "pending",
                 )
                 count = int(result.split()[-1]) if result else 0
                 if count > 0:

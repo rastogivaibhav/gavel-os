@@ -27,8 +27,8 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 logger = logging.getLogger("srp.yaml_policy_loader")
 
@@ -47,8 +47,8 @@ class YamlPolicyLoader:
 
     def __init__(self) -> None:
         self._policy_set = None
-        self._path: Optional[str] = None
-        self._watcher_thread: Optional[threading.Thread] = None
+        self._path: str | None = None
+        self._watcher_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
 
@@ -125,7 +125,7 @@ class YamlPolicyLoader:
         except Exception as exc:
             logger.error("Failed to build PolicySet from %s: %s", path, exc)
 
-    def watch(self, path: str, callback: Optional[Callable[[Path], None]] = None) -> None:
+    def watch(self, path: str, callback: Callable[[Path], None] | None = None) -> None:
         """
         Watch a YAML file for changes and reload on modification.
 
@@ -139,7 +139,7 @@ class YamlPolicyLoader:
 
         def _poll():
             file_path = Path(path)
-            last_mtime: Optional[float] = None
+            last_mtime: float | None = None
             while not self._stop_event.wait(timeout=1.0):
                 try:
                     mtime = file_path.stat().st_mtime
@@ -157,7 +157,9 @@ class YamlPolicyLoader:
                 except Exception as exc:
                     logger.warning("Policy watcher error: %s", exc)
 
-        self._watcher_thread = threading.Thread(target=_poll, daemon=True, name="gavel-policy-watcher")
+        self._watcher_thread = threading.Thread(
+            target=_poll, daemon=True, name="gavel-policy-watcher"
+        )
         self._watcher_thread.start()
         logger.info("Policy file watcher started for %s", path)
 

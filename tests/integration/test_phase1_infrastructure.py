@@ -30,25 +30,25 @@ class TestMigrationRunner:
 
     @pytest.mark.asyncio
     async def test_migration_runner_creates_tables(self, postgres_container):
-        """Test that migration runner creates schema_version and audit_ledger tables."""
+        """Test that migration runner creates schema_migrations and audit_ledger tables."""
         from db.migration_runner import MigrationRunner
 
         db_url = postgres_container.get_connection_url()
 
-        runner = MigrationRunner(db_url, migrations_dir="control-plane/db/migrations")
+        runner = MigrationRunner(db_url)
 
         # Run migrations
         count = await runner.run()
         assert count >= 1, "Should apply at least migration 001"
 
-        # Verify schema_version table exists
+        # Verify schema_migrations table exists
         conn = await runner.conn
         if not conn:
             import asyncpg
             conn = await asyncpg.connect(db_url)
 
         try:
-            rows = await conn.fetch("SELECT version FROM schema_version")
+            rows = await conn.fetch("SELECT version FROM schema_migrations")
             assert len(rows) >= 1, "Should have at least one applied migration"
             versions = [row["version"] for row in rows]
             assert 1 in versions, "Migration 1 should be applied"
@@ -70,7 +70,7 @@ class TestMigrationRunner:
 
         db_url = postgres_container.get_connection_url()
 
-        runner = MigrationRunner(db_url, migrations_dir="control-plane/db/migrations")
+        runner = MigrationRunner(db_url)
 
         status = await runner.status()
         assert "applied" in status
@@ -84,7 +84,7 @@ class TestMigrationRunner:
 
         db_url = postgres_container.get_connection_url()
 
-        runner = MigrationRunner(db_url, migrations_dir="control-plane/db/migrations")
+        runner = MigrationRunner(db_url)
 
         # Run migrations first time
         count1 = await runner.run()
@@ -189,7 +189,7 @@ class TestMainApplicationStartup:
         # Get list of routes
         routes = [route.path for route in main.app.routes]
 
-        expected_paths = ["/", "/ready", "/live", "/health"]
+        expected_paths = ["/", "/ready", "/live", "/health", "/auth/token", "/auth/jwks"]
         for path in expected_paths:
             assert path in routes, f"Route {path} should exist"
 
@@ -203,5 +203,5 @@ class TestMainApplicationStartup:
 
         # Check that middleware classes are in the stack
         middleware_types = [m.cls.__name__ for m in main.app.user_middleware]
-        assert 'LoggingMiddleware' in middleware_types, "LoggingMiddleware should be configured"
-        assert 'TenantContextMiddleware' in middleware_types, "TenantContextMiddleware should be configured"
+        assert 'SecurityHeadersMiddleware' in middleware_types, "SecurityHeadersMiddleware should be configured"
+        assert 'AuthMiddleware' in middleware_types, "AuthMiddleware should be configured"

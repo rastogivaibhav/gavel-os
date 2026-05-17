@@ -34,7 +34,10 @@ class SecurityHeadersMiddleware:
                 ]
                 if self._env == "production":
                     security_headers.append(
-                        (b"strict-transport-security", b"max-age=63072000; includeSubDomains; preload")
+                        (
+                            b"strict-transport-security",
+                            b"max-age=63072000; includeSubDomains; preload",
+                        )
                     )
                 headers.extend(security_headers)
                 message = {**message, "headers": headers}

@@ -1,7 +1,5 @@
 """OpenTelemetry metrics for Gavel."""
 
-from typing import Optional
-
 from opentelemetry import metrics
 
 # Get the global meter
