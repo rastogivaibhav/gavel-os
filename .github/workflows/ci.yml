@@ -30,6 +30,25 @@ jobs:
         # The generated-at-runtime eBPF loader satisfies attachEnforcer on CI.
         run: go test -v -count=1 -timeout=60s ./...
 
+      - name: Verify invalid policy cannot silently start an unprotected runtime
+        working-directory: enforcer
+        env:
+          GAVEL_MACHINE_KEY: ""
+          GAVEL_MONITORED_PIDS: "invalid-pid"
+        run: |
+          go build -o /tmp/gavel-enforcer .
+          set +e
+          timeout 10s /tmp/gavel-enforcer > /tmp/gavel-security-startup.log 2>&1
+          exit_status=$?
+          set -e
+          cat /tmp/gavel-security-startup.log
+          if [ "$exit_status" -eq 0 ] || [ "$exit_status" -eq 124 ]; then
+            echo "SECURITY FAILURE: invalid policy started or hung in an unprotected mode"
+            exit 1
+          fi
+          grep -q 'SECURITY BLOCKER' /tmp/gavel-security-startup.log
+
+
   # ── Python control plane tests ───────────────────────────────────────────────
   control-plane-test:
     name: Control Plane (Python)
