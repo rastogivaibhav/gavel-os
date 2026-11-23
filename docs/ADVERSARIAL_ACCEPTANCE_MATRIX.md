@@ -7,7 +7,7 @@
 | ID | Unauthorized action by agent | Required OS mediation | Baseline GavelOS state | Target proof |
 |---|---|---|---|---|
 | T01 | Outbound TCP IPv4 to denied IP | cgroup/connect4 | KERNEL_TESTED; run 45285372144 (one test PID; startup failure handling still unverified) | Kernel returns refusal, independent of middleware |
-| T02 | Same operation from fork/exec child | Cgroup identity inheritance | NOT_IMPLEMENTED for inherited identity | Child denied after replacing executable |
+| T02 | Same operation from fork/exec child | Cgroup identity inheritance | KERNEL_TESTED for dedicated guarded cgroup; run 45292312207 (legacy PID mode still bypassable) | Child denied after replacing executable |
 | T03 | IPv6 outbound | connect6/sendmsg6 | NOT_IMPLEMENTED | Denied IPv6 TCP and UDP; positive permitted control |
 | T04 | UDP `sendto` to denied IP | sendmsg4/sendmsg6 | NOT_IMPLEMENTED | Denied datagram; no unintended packets |
 | T05 | Unauthorized executable | BPF LSM bprm_check_security or equivalent | NOT_IMPLEMENTED | Kernel denies exec and records errno |
@@ -55,3 +55,9 @@ No new claim of `kernel-enforced` for an operation until a real OS denial test p
 Proposed branch [PR #9](https://github.com/rastogivaibhav/gavel-os/pull/9) introduces default enforcement-required startup, an explicitly unprotected `--audit-only` mode, rechecking policy before BPF attach, nonzero exit on policy or attachment failures, and an `enforcement_attached` status separate from preflight capability. Unit tests mock failed prerequisites, degraded control plane, policy race, missing BPF link and attachment failure; the CI enforcer job also asserts that a real invalid-policy executable invocation exits nonzero with a `SECURITY BLOCKER` message. **Tests must be verified green before marking CI_TESTED.**
 
 This is a **startup-fail-stop** improvement only; it does not deny connections for an agent that is already running separately when the daemon stops or its hook is detached. A secure agent/workload launcher or equivalent independent quarantine remains necessary before T13 can pass as an agent-boundary guarantee. Issue #3 stays open.
+
+## Guarded workload descendant proof — 2026-11-23 (T02 narrowly KERNEL_TESTED)
+
+[GitHub Actions run 45292312207](https://github.com/rastogivaibhav/gavel-os/actions/runs/45292312207), commit `1f145a63b99e8ea70d5938505a474d87a016e67b` on [draft PR #11](https://github.com/rastogivaibhav/gavel-os/pull/11): all six CI jobs passed. The isolated privileged Linux kernel job ran both `TestKernelConnect4Denial` and `TestKernelGuardedAgentAndDescendants`. The new guarded workflow creates an empty child cgroup, attaches an eBPF cgroup/connect4 program with no PID allow-bypass path, launches an unprivileged agent atomically into it via `UseCgroupFD`, and verifies both agent and fork/exec child are in a `gavel-agent-*` cgroup. The test reports permitted `127.0.0.1` connection success and forbidden `127.0.0.2` connection denied with `EPERM/EACCES` in both processes. The child test requires an observable pass result, not merely launch success. The kernel version and full capability state should be recorded in a future evidence artifact.
+
+**Exclusions:** The original legacy monitored-PID mode has *not* gained descendant inheritance. The guarded launcher does not yet withstand hostile supervisor `SIGKILL`/crash, privileged cgroup escape or eBPF removal. IPv6, UDP and file/exec restrictions remain unimplemented. A standard process-launched agent bypassing the guarded launcher is not automatically protected. Issue #4 remains open for these adversarial and integration gaps.
