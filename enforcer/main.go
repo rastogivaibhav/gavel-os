@@ -124,8 +124,16 @@ func prepareLinuxEnforcement(
 		preflight.ControlPlaneStatus = controlPlaneStatus
 	}
 	if err != nil {
-		preflight = linuxStartupFailure(preflight, "CONTROL_PLANE_POLICY_UNAVAILABLE")
+		reason := "CONTROL_PLANE_POLICY_UNAVAILABLE"
+		if preflight.PolicySource == "local_env" {
+			reason = "INVALID_RUNTIME_POLICY"
+		}
+		preflight = linuxStartupFailure(preflight, reason)
 		return preflight, nil, fmt.Errorf("runtime policy unavailable: %w", err)
+	}
+	if preflight.PolicySource == "control_plane" && controlPlaneStatus != "online" {
+		preflight = linuxStartupFailure(preflight, "CONTROL_PLANE_POLICY_UNAVAILABLE")
+		return preflight, nil, fmt.Errorf("control plane reported non-online policy status: %s", controlPlaneStatus)
 	}
 	if !linuxPolicyConfigured(config) {
 		preflight = linuxStartupFailure(preflight, "NO_RUNTIME_POLICY")
@@ -135,6 +143,10 @@ func prepareLinuxEnforcement(
 	if err != nil {
 		preflight = linuxStartupFailure(preflight, "EBPF_ATTACH_FAILED")
 		return preflight, nil, fmt.Errorf("kernel program attachment failed: %w", err)
+	}
+	if cleanup == nil {
+		preflight = linuxStartupFailure(preflight, "EBPF_ATTACH_FAILED")
+		return preflight, nil, fmt.Errorf("kernel attach returned no live link handle")
 	}
 	preflight.EnforcementAttached = true
 	preflight.MonitoredPIDCount = len(config.MonitoredPIDs)
