@@ -266,22 +266,31 @@ func resolveLinuxRuntimePolicy(preflight LinuxPreflightResult) (LinuxEnforcerCon
 }
 
 func resolveLinuxCgroupPath() (string, bool) {
-	candidates := []string{}
-	if envPath := os.Getenv("GAVEL_CGROUP_PATH"); envPath != "" {
-		candidates = append(candidates, envPath)
+	// A user-selected enforcement scope must NEVER silently widen to the
+	// host root cgroup when a typo, missing mount, or permissions break it.
+	if explicit, set := os.LookupEnv("GAVEL_CGROUP_PATH"); set {
+		return linuxCgroupV2Path(strings.TrimSpace(explicit))
 	}
-	candidates = append(candidates, "/sys/fs/cgroup", "/sys/fs/cgroup/unified")
-
-	for _, candidate := range candidates {
-		info, err := os.Stat(candidate)
-		if err != nil || !info.IsDir() {
-			continue
-		}
-		if _, err := os.Stat(candidate + "/cgroup.controllers"); err == nil {
-			return candidate, true
+	for _, candidate := range []string{"/sys/fs/cgroup", "/sys/fs/cgroup/unified"} {
+		if path, ok := linuxCgroupV2Path(candidate); ok {
+			return path, true
 		}
 	}
 	return "", false
+}
+
+func linuxCgroupV2Path(candidate string) (string, bool) {
+	if candidate == "" {
+		return "", false
+	}
+	info, err := os.Stat(candidate)
+	if err != nil || !info.IsDir() {
+		return "", false
+	}
+	if _, err := os.Stat(candidate + "/cgroup.controllers"); err != nil {
+		return "", false
+	}
+	return candidate, true
 }
 
 func readKernelVersion() string {
