@@ -1,12 +1,12 @@
 # GavelOS — Adversarial OS-operation acceptance matrix
 
-**Baseline date:** 2026-11-23. These are test specifications, **not passing results**.
+**Baseline date:** 2026-11-23. Status is evidence-gated. One explicitly scoped kernel proof (T01/T10) passed in [GitHub Actions run 45285372144](https://github.com/rastogivaibhav/gavel-os/actions/runs/45285372144); all other tests remain unproven unless separately recorded.
 
 **State vocabulary:** NOT_IMPLEMENTED / IMPLEMENTED_UNVERIFIED / KERNEL_TESTED / ADVERSARIAL_TESTED / INDEPENDENTLY_VERIFIED. `PASS` requires evidence (kernel status, test log, version/ref). `DENY` in a control-plane log without blocked OS action is not PASS.
 
 | ID | Unauthorized action by agent | Required OS mediation | Baseline GavelOS state | Target proof |
 |---|---|---|---|---|
-| T01 | Outbound TCP IPv4 to denied IP | cgroup/connect4 | IMPLEMENTED_UNVERIFIED; startup readiness bug | Kernel returns refusal, independent of middleware |
+| T01 | Outbound TCP IPv4 to denied IP | cgroup/connect4 | KERNEL_TESTED; run 45285372144 (one test PID; startup failure handling still unverified) | Kernel returns refusal, independent of middleware |
 | T02 | Same operation from fork/exec child | Cgroup identity inheritance | NOT_IMPLEMENTED for inherited identity | Child denied after replacing executable |
 | T03 | IPv6 outbound | connect6/sendmsg6 | NOT_IMPLEMENTED | Denied IPv6 TCP and UDP; positive permitted control |
 | T04 | UDP `sendto` to denied IP | sendmsg4/sendmsg6 | NOT_IMPLEMENTED | Denied datagram; no unintended packets |
@@ -15,7 +15,7 @@
 | T07 | Modify protected OS/config file | Appropriate file/rename/truncate hooks | NOT_IMPLEMENTED | Write, rename, truncation denied |
 | T08 | Attempt eBPF program injection | bpf syscall/LSM gate, explicit capabilities | NOT_IMPLEMENTED | Unauthorized BPF load denied under declared tier |
 | T09 | Tamper with maps, links or enforcer | integrity/privilege boundary | NOT_IMPLEMENTED | Agent unable to disable protection under declared tier |
-| T10 | Agent bypasses SDK and invokes socket directly | same kernel network hook | IMPLEMENTED_UNVERIFIED | Kernel denial still enforced |
+| T10 | Agent bypasses SDK and invokes socket directly | same kernel network hook | KERNEL_TESTED; direct test-process TCP connect without middleware, run 45285372144 | Kernel denial still enforced |
 | T11 | Semantic unauthorized API operation over allowed TLS connection | separate trusted gateway/API authorization | NOT UNIVERSALLY ENFORCED | Gateway blocks specific action; not attributed to kernel hook |
 | T12 | Windows denied destination | Native WFP Windows Firewall rules | IMPLEMENTED_UNVERIFIED; scope may be host-wide | OS firewall denies; no userspace-only fallback |
 | T13 | Control-plane outage and policy failure | local cached known-good controls / fail closed | BASELINE UNSAFE: Linux may enter audit-only | Cannot enter "protected" state with unprotected actions |
@@ -43,3 +43,9 @@ PID lifecycle; subprocesses; IPv6; UDP; alternate sockets; already-open or inher
 ## Release gate
 
 No new claim of `kernel-enforced` for an operation until a real OS denial test passes. No claim of `agent-proof` until active adversarial tests against that operation pass. No claim of `root-resistant` without an explicitly hardened deployment and tested root threat model.
+
+## Evidence recorded — 2026-11-23 (T01/T10)
+
+**Evidence:** [GitHub Actions run 45285372144](https://github.com/rastogivaibhav/gavel-os/actions/runs/45285372144), job **Kernel IPv4 Denial (ephemeral VM)**; commit `9d808d50023b645d63f2ca31615f88b342c1c284` (PR #9, unmerged). GitHub log shows `TestKernelConnect4Probe` and `TestKernelConnect4Denial` **PASS**, with direct TCP dial to permitted `127.0.0.1`, kernel `EPERM/EACCES` for forbidden `127.0.0.2`, and no connection observed at the denied listener. The job ran on an ephemeral Ubuntu 26.04.1 runner with read-only repository token and a dedicated test cgroup. The test uses an in-process constructed eBPF program and controlled single PID (not a real multi-agent workload). Go version 1.26.1. The exact kernel version and effective privileged-runner capabilities were **not captured** in this job and are needed in subsequent evidence.
+
+**Scope:** direct IPv4 TCP `connect4` only. This does not establish descendant identity, IPv6/UDP, filesystem/exec permissions, surviving enforcer termination or root-level integrity. Passing T01/T10 does not close M0 until startup and outage behavior are safe.
