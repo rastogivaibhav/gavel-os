@@ -1,3 +1,5 @@
+//go:build ignore
+
 #ifndef __GAVEL_BPF_C__
 #define __GAVEL_BPF_C__
 
