@@ -147,3 +147,27 @@ jobs:
       - name: Build extension bundle
         working-directory: vscode-extension
         run: npm run build
+
+  # Security proof job: only branch-originated PRs in THIS repository.
+  # Never run arbitrary fork-contributed code with elevated kernel privileges.
+  kernel-denial-proof:
+    name: Kernel IPv4 Denial (ephemeral VM)
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/agent-security-boundary-roadmap-20261123' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: enforcer/go.mod
+          cache: true
+      - name: Compile kernel proof test
+        working-directory: enforcer
+        run: go test -c -o ../gavel-kernel.test .
+      - name: Assert real isolated cgroup/eBPF denial
+        run: |
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 45s ./gavel-kernel.test \
+            -test.run '^TestKernelConnect4Denial$' -test.v -test.timeout=40s
