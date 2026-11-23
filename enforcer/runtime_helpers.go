@@ -59,9 +59,13 @@ func linuxReasonDescription(reason string) string {
 	case "NO_RUNTIME_POLICY":
 		return "No monitored PIDs or block/redirect policy were supplied for Linux enforcement."
 	case "CONTROL_PLANE_POLICY_UNAVAILABLE":
-		return "The runtime could not fetch its policy from the control plane and must remain audit-only."
+		return "The runtime cannot fetch its policy; enforcement-required startup must abort."
 	case "INVALID_RUNTIME_POLICY":
 		return "The configured Linux policy could not be parsed into a valid runtime configuration."
+	case "EBPF_ATTACH_FAILED":
+		return "The BPF hook could not attach; no Linux protection is active."
+	case "OPERATOR_AUDIT_ONLY":
+		return "Operator explicitly requested unprotected audit-only operation."
 	default:
 		return "Linux runtime status is unavailable."
 	}
@@ -82,9 +86,13 @@ func linuxRecommendedAction(reason string) string {
 	case "NO_RUNTIME_POLICY":
 		return "Configure monitored PIDs and block/redirect policy through the control plane or local env file."
 	case "CONTROL_PLANE_POLICY_UNAVAILABLE":
-		return "Restore control-plane connectivity or provide a temporary local runtime policy for audit-only startup."
+		return "Restore control-plane connectivity before launching the protected workload. No automatic downgrade to audit-only is permitted."
 	case "INVALID_RUNTIME_POLICY":
 		return "Fix the runtime policy values and rerun the Linux preflight command."
+	case "EBPF_ATTACH_FAILED":
+		return "Check kernel BPF verifier, privileges and cgroup path. Do not start protected workloads."
+	case "OPERATOR_AUDIT_ONLY":
+		return "Remove --audit-only to request OS enforcement, and verify kernel attachment before running any agent."
 	default:
 		return "Inspect logs and rerun preflight for a more specific Linux runtime diagnosis."
 	}
