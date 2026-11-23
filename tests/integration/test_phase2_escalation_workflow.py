@@ -59,7 +59,13 @@ class TestEscalationWorkflow:
         )
 
         # Extract escalation ID from ticket
-        escalation_id = f"esc_{ticket.split('-')[1][:16]}"
+        async with integration_db_pool.acquire() as conn:
+            escalation_id = await conn.fetchval(
+                "SELECT id FROM escalations WHERE tenant_id = $1 AND ticket_number = $2",
+                "tenant-002",
+                ticket,
+            )
+        assert escalation_id is not None
 
         # Query status
         status = await service.get_escalation_status("tenant-002", escalation_id)
@@ -87,7 +93,13 @@ class TestEscalationWorkflow:
             risk_level="high",
         )
 
-        escalation_id = f"esc_{ticket.split('-')[1][:16]}"
+        async with integration_db_pool.acquire() as conn:
+            escalation_id = await conn.fetchval(
+                "SELECT id FROM escalations WHERE tenant_id = $1 AND ticket_number = $2",
+                "tenant-003",
+                ticket,
+            )
+        assert escalation_id is not None
 
         # Get initial status
         status = await service.get_escalation_status("tenant-003", escalation_id)
@@ -108,6 +120,27 @@ class TestEscalationWorkflow:
         status = await service.get_escalation_status("tenant-003", escalation_id)
         assert status["status"] == "approved"
         assert len(status["approvals"]) >= 1
+
+    @pytest.mark.asyncio
+    async def test_approval_rejects_unknown_id_without_mutation(self, integration_db_pool):
+        """A bogus or cross-tenant escalation cannot be marked approved."""
+        from service.escalation_service import EscalationService
+
+        service = EscalationService(integration_db_pool)
+        success, message = await service.approve_escalation(
+            tenant_id="tenant-003",
+            escalation_id="esc_does_not_exist",
+            approver_id="security-reviewer",
+            decision="approved",
+        )
+        assert success is False
+        assert "not found" in message.lower()
+        async with integration_db_pool.acquire() as conn:
+            count = await conn.fetchval(
+                "SELECT count(*) FROM escalation_approvals WHERE escalation_id = $1",
+                "esc_does_not_exist",
+            )
+        assert count == 0
 
     @pytest.mark.asyncio
     async def test_pending_escalations_query(self, integration_db_pool):
