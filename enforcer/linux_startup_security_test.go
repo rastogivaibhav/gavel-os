@@ -120,6 +120,57 @@ func TestEnforcementActiveOnlyAfterAttachedHook(t *testing.T) {
 	}
 }
 
+func TestEnforcementRefusesDegradedControlPlaneEvenWithPolicy(t *testing.T) {
+	preflight := readyLinuxPreflight()
+	preflight.PolicySource = "control_plane"
+	valid := LinuxEnforcerConfig{MonitoredPIDs: []uint32{123}, BlockedIPv4: []uint32{1}}
+	attached := false
+	status, cleanup, err := prepareLinuxEnforcement(preflight,
+		func(LinuxPreflightResult) (LinuxEnforcerConfig, string, error) {
+			return valid, "degraded", nil
+		},
+		func(string, LinuxEnforcerConfig) (func(), error) {
+			attached = true
+			return func() {}, nil
+		})
+	if err == nil || attached || cleanup != nil || status.EnforcementAttached {
+		t.Fatalf("degraded policy source must not start enforcement: %+v, %v", status, err)
+	}
+	if status.ReasonCode != "CONTROL_PLANE_POLICY_UNAVAILABLE" {
+		t.Fatalf("expected failure reason: %+v", status)
+	}
+}
+
+func TestEnforcementRejectsMissingLinkHandle(t *testing.T) {
+	valid := LinuxEnforcerConfig{MonitoredPIDs: []uint32{123}, BlockedIPv4: []uint32{1}}
+	status, cleanup, err := prepareLinuxEnforcement(readyLinuxPreflight(),
+		func(LinuxPreflightResult) (LinuxEnforcerConfig, string, error) {
+			return valid, "online", nil
+		},
+		func(string, LinuxEnforcerConfig) (func(), error) {
+			return nil, nil
+		})
+	if err == nil || cleanup != nil || status.EnforcementAttached || status.RuntimeMode == "enforce" {
+		t.Fatalf("nil link handle must not count as installed enforcement: %+v, %v", status, err)
+	}
+}
+
+func TestLocalInvalidPolicyReasonIsNotMaskedAsRemoteOutage(t *testing.T) {
+	preflight := readyLinuxPreflight()
+	preflight.PolicySource = "local_env"
+	status, cleanup, err := prepareLinuxEnforcement(preflight,
+		func(LinuxPreflightResult) (LinuxEnforcerConfig, string, error) {
+			return LinuxEnforcerConfig{}, "offline", errors.New("invalid PID")
+		},
+		func(string, LinuxEnforcerConfig) (func(), error) {
+			t.Fatal("attach should not be attempted after bad policy")
+			return nil, nil
+		})
+	if err == nil || cleanup != nil || status.ReasonCode != "INVALID_RUNTIME_POLICY" {
+		t.Fatalf("expected invalid local policy rejection: %+v, %v", status, err)
+	}
+}
+
 func TestAuditOnlyRequiresExplicitOperatorFlagPath(t *testing.T) {
 	status := linuxStartupFailure(readyLinuxPreflight(), "OPERATOR_AUDIT_ONLY")
 	if status.EnforcementAttached || status.RuntimeMode != "audit_only" || status.ReasonCode != "OPERATOR_AUDIT_ONLY" {
