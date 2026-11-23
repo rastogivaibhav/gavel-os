@@ -185,12 +185,14 @@ jobs:
           cache: true
       - name: Compile kernel proof test
         working-directory: enforcer
-        run: go test -c -o ../gavel-kernel.test .
+        run: |
+          go test -c -o /tmp/gavel-kernel.test .
+          chmod 755 /tmp/gavel-kernel.test
       - name: Assert real isolated cgroup/eBPF denial
         run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 45s ./gavel-kernel.test \
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 45s /tmp/gavel-kernel.test \
             -test.run '^TestKernelConnect4Denial$' -test.v -test.timeout=40s
       - name: Assert agent and descendant inherit kernel cgroup denial
         run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s ./gavel-kernel.test \
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
             -test.run '^TestKernelGuardedAgentAndDescendants$' -test.v -test.timeout=55s
