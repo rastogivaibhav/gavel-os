@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"encoding/binary"
+	"testing"
+)
 
 func TestArchSupportsEnforcement(t *testing.T) {
 	if !archSupportsEnforcement("amd64") {
@@ -215,6 +218,27 @@ func TestParseIPv4ParsesValidInput(t *testing.T) {
 	}
 	if ip == 0 {
 		t.Fatalf("expected non-zero parsed IP value")
+	}
+}
+
+func TestParseIPv4MatchesBPFContextBytes(t *testing.T) {
+	for _, tc := range []struct {
+		address string
+		want    [4]byte
+	}{
+		{"127.0.0.2", [4]byte{127, 0, 0, 2}},
+		{"10.20.30.40", [4]byte{10, 20, 30, 40}},
+		{"192.0.2.15", [4]byte{192, 0, 2, 15}},
+	} {
+		actual, err := parseIPv4(tc.address)
+		if err != nil {
+			t.Fatalf("parseIPv4(%s): %v", tc.address, err)
+		}
+		var encoded [4]byte
+		binary.NativeEndian.PutUint32(encoded[:], actual)
+		if encoded != tc.want {
+			t.Fatalf("native BPF lookup bytes for %s: got %v, want %v", tc.address, encoded, tc.want)
+		}
 	}
 }
 
