@@ -171,7 +171,7 @@ jobs:
   # Never run arbitrary fork-contributed code with elevated kernel privileges.
   kernel-denial-proof:
     name: Kernel IPv4 Denial (ephemeral VM)
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (github.head_ref == 'feat/agent-security-boundary-roadmap-20261123' || github.head_ref == 'feat/linux-guarded-cgroup-workload-20261123') }}
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/linux-guarded-cgroup-workload-20261123' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -189,10 +189,8 @@ jobs:
       - name: Assert real isolated cgroup/eBPF denial
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 45s ./gavel-kernel.test \
-            -test.run '^TestKernelConnect4Denial
- -test.v -test.timeout=40s
+            -test.run '^TestKernelConnect4Denial$' -test.v -test.timeout=40s
       - name: Assert agent and descendant inherit kernel cgroup denial
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s ./gavel-kernel.test \
-            -test.run '^TestKernelGuardedAgentAndDescendants
- -test.v -test.timeout=55s
+            -test.run '^TestKernelGuardedAgentAndDescendants$' -test.v -test.timeout=55s
