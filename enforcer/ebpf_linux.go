@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
@@ -22,7 +23,14 @@ func ebpfProgramStatus() string {
 }
 
 func attachEnforcer(cgroupPath string, config LinuxEnforcerConfig) (func(), error) {
-	objects, err := loadLinuxEnforcerObjects()
+	if config.ProtectAll {
+		// Never enable all-process enforcement at the host cgroup root.
+		clean := filepath.Clean(cgroupPath)
+		if clean == "/sys/fs/cgroup" || clean == "/sys/fs/cgroup/unified" || clean == "/" {
+			return nil, fmt.Errorf("refuse protect-all on root cgroup %s", clean)
+		}
+	}
+	objects, err := loadLinuxEnforcerObjects(config.ProtectAll)
 	if err != nil {
 		return func() {}, err
 	}
@@ -47,7 +55,7 @@ func attachEnforcer(cgroupPath string, config LinuxEnforcerConfig) (func(), erro
 	}, nil
 }
 
-func loadLinuxEnforcerObjects() (*linuxEnforcerObjects, error) {
+func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 	spec := &ebpf.CollectionSpec{
 		Maps: map[string]*ebpf.MapSpec{
 			"monitored_pids": {
@@ -75,7 +83,7 @@ func loadLinuxEnforcerObjects() (*linuxEnforcerObjects, error) {
 				Type:         ebpf.CGroupSockAddr,
 				AttachType:   ebpf.AttachCGroupInet4Connect,
 				License:      "GPL",
-				Instructions: buildConnect4Instructions(),
+				Instructions: buildConnect4Instructions(protectAll),
 			},
 		},
 	}
@@ -136,7 +144,7 @@ func configureLinuxEnforcer(objects *linuxEnforcerObjects, config LinuxEnforcerC
 	return nil
 }
 
-func buildConnect4Instructions() asm.Instructions {
+func buildConnect4Instructions(protectAll bool) asm.Instructions {
 	const (
 		pidKeyOffset   = -8
 		ipKeyOffset    = -16
@@ -145,8 +153,9 @@ func buildConnect4Instructions() asm.Instructions {
 		ctxUserPort    = 24
 	)
 
-	return asm.Instructions{
-		asm.Mov.Reg(asm.R6, asm.R1),
+	instructions := asm.Instructions{asm.Mov.Reg(asm.R6, asm.R1)}
+	if !protectAll {
+		instructions = append(instructions,
 		asm.FnGetCurrentPidTgid.Call(),
 		asm.RSh.Imm(asm.R0, 32),
 		asm.StoreMem(asm.RFP, pidKeyOffset, asm.R0, asm.Word),
@@ -157,7 +166,9 @@ func buildConnect4Instructions() asm.Instructions {
 		asm.JEq.Imm(asm.R0, 0, "allow"),
 		asm.LoadMem(asm.R1, asm.R0, 0, asm.Byte),
 		asm.JEq.Imm(asm.R1, 0, "allow"),
-
+		)
+	}
+	return append(instructions,
 		asm.LoadMem(asm.R1, asm.R6, ctxUserIP4, asm.Word),
 		asm.StoreMem(asm.RFP, ipKeyOffset, asm.R1, asm.Word),
 		asm.Mov.Reg(asm.R2, asm.RFP),
@@ -186,5 +197,5 @@ func buildConnect4Instructions() asm.Instructions {
 
 		asm.Mov.Imm(asm.R0, 1).WithSymbol("allow"),
 		asm.Return(),
-	}
+	)
 }
