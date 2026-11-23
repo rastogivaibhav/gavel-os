@@ -44,6 +44,11 @@ async def integration_db_pool(postgres_container):
         "postgresql+psycopg2://", "postgresql://"
     )
 
+    # Integration fixtures must run the real migrations before exercising
+    # escalation and audit tables; otherwise tests fail against an empty DB.
+    from db.migration_runner import MigrationRunner
+    await MigrationRunner(connection_string).run()
+
     pool = await asyncpg.create_pool(
         connection_string,
         min_size=1,
