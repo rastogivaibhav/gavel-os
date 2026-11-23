@@ -121,7 +121,7 @@ def _matches(cond: PolicyCondition, proposal: Proposal) -> bool:
             value = params.get(field)
             if value is None:
                 continue
-            if not isinstance(value, (int, float)):
+            if not isinstance(value, int | float):
                 return False
             if float(value) > float(max_value):
                 exceeded = True

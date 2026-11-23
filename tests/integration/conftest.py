@@ -28,7 +28,9 @@ def postgres_container():
 @pytest.fixture(scope="function")
 async def integration_db(postgres_container):
     """Get isolated database connection for integration test."""
-    connection_string = postgres_container.get_connection_url()
+    connection_string = str(postgres_container.get_connection_url()).replace(
+        "postgresql+psycopg2://", "postgresql://"
+    )
 
     conn = await asyncpg.connect(connection_string)
     yield conn
@@ -38,7 +40,14 @@ async def integration_db(postgres_container):
 @pytest.fixture(scope="function")
 async def integration_db_pool(postgres_container):
     """Get database pool for integration test."""
-    connection_string = postgres_container.get_connection_url()
+    connection_string = str(postgres_container.get_connection_url()).replace(
+        "postgresql+psycopg2://", "postgresql://"
+    )
+
+    # Integration fixtures must run the real migrations before exercising
+    # escalation and audit tables; otherwise tests fail against an empty DB.
+    from db.migration_runner import MigrationRunner
+    await MigrationRunner(connection_string).run()
 
     pool = await asyncpg.create_pool(
         connection_string,

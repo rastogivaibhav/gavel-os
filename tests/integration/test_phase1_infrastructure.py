@@ -33,7 +33,9 @@ class TestMigrationRunner:
         """Test that migration runner creates schema_migrations and audit_ledger tables."""
         from db.migration_runner import MigrationRunner
 
-        db_url = postgres_container.get_connection_url()
+        db_url = str(postgres_container.get_connection_url()).replace(
+            "postgresql+psycopg2://", "postgresql://"
+        )
 
         runner = MigrationRunner(db_url)
 
@@ -42,10 +44,10 @@ class TestMigrationRunner:
         assert count >= 1, "Should apply at least migration 001"
 
         # Verify schema_migrations table exists
-        conn = await runner.conn
-        if not conn:
-            import asyncpg
-            conn = await asyncpg.connect(db_url)
+        # MigrationRunner disconnects on return; use an independent connection
+        # to verify the actual persisted database state.
+        import asyncpg
+        conn = await asyncpg.connect(db_url)
 
         try:
             rows = await conn.fetch("SELECT version FROM schema_migrations")
@@ -68,7 +70,9 @@ class TestMigrationRunner:
         """Test migration status command."""
         from db.migration_runner import MigrationRunner
 
-        db_url = postgres_container.get_connection_url()
+        db_url = str(postgres_container.get_connection_url()).replace(
+            "postgresql+psycopg2://", "postgresql://"
+        )
 
         runner = MigrationRunner(db_url)
 
@@ -82,7 +86,9 @@ class TestMigrationRunner:
         """Test that running migrations twice is idempotent."""
         from db.migration_runner import MigrationRunner
 
-        db_url = postgres_container.get_connection_url()
+        db_url = str(postgres_container.get_connection_url()).replace(
+            "postgresql+psycopg2://", "postgresql://"
+        )
 
         runner = MigrationRunner(db_url)
 

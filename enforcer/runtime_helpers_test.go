@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"encoding/binary"
+	"testing"
+)
 
 func TestArchSupportsEnforcement(t *testing.T) {
 	if !archSupportsEnforcement("amd64") {
@@ -218,6 +221,27 @@ func TestParseIPv4ParsesValidInput(t *testing.T) {
 	}
 }
 
+func TestParseIPv4MatchesBPFContextBytes(t *testing.T) {
+	for _, tc := range []struct {
+		address string
+		want    [4]byte
+	}{
+		{"127.0.0.2", [4]byte{127, 0, 0, 2}},
+		{"10.20.30.40", [4]byte{10, 20, 30, 40}},
+		{"192.0.2.15", [4]byte{192, 0, 2, 15}},
+	} {
+		actual, err := parseIPv4(tc.address)
+		if err != nil {
+			t.Fatalf("parseIPv4(%s): %v", tc.address, err)
+		}
+		var encoded [4]byte
+		binary.NativeEndian.PutUint32(encoded[:], actual)
+		if encoded != tc.want {
+			t.Fatalf("native BPF lookup bytes for %s: got %v, want %v", tc.address, encoded, tc.want)
+		}
+	}
+}
+
 func TestHasCapabilityReturnsFalseWhenBitMissing(t *testing.T) {
 	if hasCapability(0, 21) {
 		t.Fatalf("expected missing capability bit to be false")
@@ -284,5 +308,23 @@ func TestLinuxEnforcerConfigFromRuntimePolicyWithoutProxy(t *testing.T) {
 	}
 	if config.Proxy.Enabled != 0 {
 		t.Fatalf("expected proxy to remain disabled")
+	}
+}
+
+// A runtime-generated loader must be eligible for the real attach attempt.
+// Actual kernel attach/deny behaviour requires privileged integration testing.
+func TestLinuxEBPFProgramReady(t *testing.T) {
+	for _, tc := range []struct {
+		status string
+		want   bool
+	}{
+		{"runtime-generated", true},
+		{"available", true},
+		{"unavailable", false},
+		{"", false},
+	} {
+		if got := linuxEBPFProgramReady(tc.status); got != tc.want {
+			t.Fatalf("linuxEBPFProgramReady(%q) = %t, want %t", tc.status, got, tc.want)
+		}
 	}
 }

@@ -1,7 +1,11 @@
 """Playwright browser tests for Gavel OS API UI."""
 
 import pytest
-from playwright.async_api import async_playwright, expect
+# Live-browser tests are optional in the default CI job. Importorskip makes
+# their absence explicit rather than failing unrelated control-plane tests.
+playwright_async = pytest.importorskip("playwright.async_api", reason="Optional live Playwright dependency not installed")
+async_playwright = playwright_async.async_playwright
+expect = playwright_async.expect
 import asyncio
 
 

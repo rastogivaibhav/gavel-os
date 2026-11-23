@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"flag"
 	"log"
 	"net/http"
@@ -27,6 +28,7 @@ type LinuxPreflightResult struct {
 	RuntimeArch        string `json:"runtime_arch"`
 	RuntimeMode        string `json:"runtime_mode"`
 	EnforcementCapable bool   `json:"enforcement_capable"`
+	EnforcementAttached bool  `json:"enforcement_attached"`
 	ReasonCode         string `json:"reason_code"`
 	ReasonDescription  string `json:"reason_description"`
 	RecommendedAction  string `json:"recommended_action"`
@@ -71,16 +73,17 @@ type LinuxRuntimeEvent struct {
 
 func main() {
 	preflightOnly := flag.Bool("preflight", false, "print runtime preflight and exit")
+	auditOnly := flag.Bool("audit-only", false, "explicitly start in UNPROTECTED audit-only mode; never use for protected agents")
 	flag.Parse()
 
 	preflight := runLinuxPreflight()
+	if *auditOnly {
+		preflight = linuxStartupFailure(preflight, "OPERATOR_AUDIT_ONLY")
+	}
 	log.Printf(
 		"Gavel Shield (linux) starting on %s/%s mode=%s reason=%s detail=%s",
-		preflight.RuntimeOS,
-		preflight.RuntimeArch,
-		preflight.RuntimeMode,
-		preflight.ReasonCode,
-		preflight.ReasonDescription,
+		preflight.RuntimeOS, preflight.RuntimeArch, preflight.RuntimeMode,
+		preflight.ReasonCode, preflight.ReasonDescription,
 	)
 
 	if *preflightOnly {
@@ -88,46 +91,80 @@ func main() {
 		return
 	}
 
-	if preflight.RuntimeMode != "enforce" {
-		log.Printf(
-			"Gavel Shield entering audit-only mode: %s action=%s",
-			preflight.ReasonCode,
-			preflight.RecommendedAction,
-		)
+	if *auditOnly {
+		log.Printf("SECURITY WARNING: deliberately running without kernel enforcement; this mode cannot protect an agent")
 		startLinuxRuntime(preflight, nil)
 		return
 	}
 
-	config, controlPlaneStatus, err := resolveLinuxRuntimePolicy(preflight)
+	// Default is enforcement-required: any prerequisite, policy or attachment
+	// failure aborts startup. An enforcer process exiting is NOT a quarantine
+	// for a separately running agent; the agent launcher must gate startup.
+	active, cleanup, err := prepareLinuxEnforcement(preflight, resolveLinuxRuntimePolicy, attachEnforcer)
+	if err != nil {
+		log.Fatalf("SECURITY BLOCKER: GavelOS kernel enforcement not active (%s): %v. Refuse to start protected agents; stopping enforcer with nonzero status.", active.ReasonCode, err)
+	}
+	log.Printf("Gavel Shield kernel enforcement attached at %s", active.CgroupPath)
+	startLinuxRuntime(active, cleanup)
+}
+
+// prepareLinuxEnforcement does not start the runtime or an agent. Successful
+// return is possible only when an applicable policy has been revalidated and
+// the caller-supplied kernel attach function has returned successfully.
+func prepareLinuxEnforcement(
+	preflight LinuxPreflightResult,
+	getPolicy func(LinuxPreflightResult) (LinuxEnforcerConfig, string, error),
+	attach func(string, LinuxEnforcerConfig) (func(), error),
+) (LinuxPreflightResult, func(), error) {
+	if preflight.RuntimeMode != "enforce" {
+		return preflight, nil, fmt.Errorf("preflight rejected enforcement: %s", preflight.ReasonCode)
+	}
+	config, controlPlaneStatus, err := getPolicy(preflight)
 	if controlPlaneStatus != "" {
 		preflight.ControlPlaneStatus = controlPlaneStatus
 	}
 	if err != nil {
-		log.Printf("Gavel Shield falling back to audit-only mode: runtime policy sync failed: %v", err)
-		preflight.RuntimeMode = "audit_only"
-		preflight.ReasonCode = "CONTROL_PLANE_POLICY_UNAVAILABLE"
-		preflight.ReasonDescription = linuxReasonDescription(preflight.ReasonCode)
-		preflight.RecommendedAction = linuxRecommendedAction(preflight.ReasonCode)
-		startLinuxRuntime(preflight, nil)
-		return
+		reason := "CONTROL_PLANE_POLICY_UNAVAILABLE"
+		if preflight.PolicySource == "local_env" {
+			reason = "INVALID_RUNTIME_POLICY"
+		}
+		preflight = linuxStartupFailure(preflight, reason)
+		return preflight, nil, fmt.Errorf("runtime policy unavailable: %w", err)
 	}
-
-	cleanup, err := attachEnforcer(preflight.CgroupPath, config)
+	if preflight.PolicySource == "control_plane" && controlPlaneStatus != "online" {
+		preflight = linuxStartupFailure(preflight, "CONTROL_PLANE_POLICY_UNAVAILABLE")
+		return preflight, nil, fmt.Errorf("control plane reported non-online policy status: %s", controlPlaneStatus)
+	}
+	if !linuxPolicyConfigured(config) {
+		preflight = linuxStartupFailure(preflight, "NO_RUNTIME_POLICY")
+		return preflight, nil, fmt.Errorf("runtime policy changed or empty after preflight")
+	}
+	cleanup, err := attach(preflight.CgroupPath, config)
 	if err != nil {
-		log.Printf("Gavel Shield falling back to audit-only mode: %v", err)
-		preflight.RuntimeMode = "audit_only"
-		preflight.ReasonCode = "EBPF_ATTACH_FAILED"
-		preflight.ReasonDescription = linuxReasonDescription(preflight.ReasonCode)
-		preflight.RecommendedAction = linuxRecommendedAction(preflight.ReasonCode)
-		startLinuxRuntime(preflight, nil)
-		return
+		preflight = linuxStartupFailure(preflight, "EBPF_ATTACH_FAILED")
+		return preflight, nil, fmt.Errorf("kernel program attachment failed: %w", err)
 	}
-
+	if cleanup == nil {
+		preflight = linuxStartupFailure(preflight, "EBPF_ATTACH_FAILED")
+		return preflight, nil, fmt.Errorf("kernel attach returned no live link handle")
+	}
+	preflight.EnforcementAttached = true
 	preflight.MonitoredPIDCount = len(config.MonitoredPIDs)
 	preflight.BlockedIPv4Count = len(config.BlockedIPv4)
 	preflight.ProxyRedirect = config.Proxy.Enabled == 1
-	log.Printf("Gavel Shield enforcement active at %s", preflight.CgroupPath)
-	startLinuxRuntime(preflight, cleanup)
+	return preflight, cleanup, nil
+}
+
+// A failed or explicitly disabled startup must never report an active hook.
+// The command exits nonzero on failure; it does not attempt to keep a
+// non-enforcing daemon alive under a misleading "protected" status.
+func linuxStartupFailure(preflight LinuxPreflightResult, reason string) LinuxPreflightResult {
+	preflight.RuntimeMode = "audit_only"
+	preflight.EnforcementAttached = false
+	preflight.ReasonCode = reason
+	preflight.ReasonDescription = linuxReasonDescription(reason)
+	preflight.RecommendedAction = linuxRecommendedAction(reason)
+	return preflight
 }
 
 func startLinuxRuntime(preflight LinuxPreflightResult, cleanup func()) {
@@ -171,7 +208,10 @@ func runLinuxPreflight() LinuxPreflightResult {
 
 	hasPrivilege := result.HasCapBPF || result.HasCapSysAdmin
 	result.EnforcementCapable = archSupported && cgroupV2 && hasPrivilege && memlockReady
-	ebpfReady := result.EBPFProgramStatus == "available" && memlockReady
+	// The shipping Linux loader constructs BPF instructions at runtime; it does not
+	// ship a generated object named "available". Actual load/attach is tested
+	// in attachEnforcer; this check only identifies a supported loader mode.
+	ebpfReady := linuxEBPFProgramReady(result.EBPFProgramStatus) && memlockReady
 
 	config, controlPlaneStatus, policyErr := resolveLinuxRuntimePolicy(result)
 	result.ControlPlaneStatus = controlPlaneStatus
@@ -200,6 +240,13 @@ func runLinuxPreflight() LinuxPreflightResult {
 	result.ReasonDescription = linuxReasonDescription(result.ReasonCode)
 	result.RecommendedAction = linuxRecommendedAction(result.ReasonCode)
 	return result
+}
+
+// linuxEBPFProgramReady reports whether the executable includes a usable BPF
+// loader implementation. This is not evidence that a BPF program has loaded
+// or attached; callers must verify attachEnforcer succeeds separately.
+func linuxEBPFProgramReady(status string) bool {
+	return status == "available" || status == "runtime-generated"
 }
 
 func resolveLinuxRuntimePolicy(preflight LinuxPreflightResult) (LinuxEnforcerConfig, string, error) {
@@ -231,22 +278,31 @@ func resolveLinuxRuntimePolicy(preflight LinuxPreflightResult) (LinuxEnforcerCon
 }
 
 func resolveLinuxCgroupPath() (string, bool) {
-	candidates := []string{}
-	if envPath := os.Getenv("GAVEL_CGROUP_PATH"); envPath != "" {
-		candidates = append(candidates, envPath)
+	// A user-selected enforcement scope must NEVER silently widen to the
+	// host root cgroup when a typo, missing mount, or permissions break it.
+	if explicit, set := os.LookupEnv("GAVEL_CGROUP_PATH"); set {
+		return linuxCgroupV2Path(strings.TrimSpace(explicit))
 	}
-	candidates = append(candidates, "/sys/fs/cgroup", "/sys/fs/cgroup/unified")
-
-	for _, candidate := range candidates {
-		info, err := os.Stat(candidate)
-		if err != nil || !info.IsDir() {
-			continue
-		}
-		if _, err := os.Stat(candidate + "/cgroup.controllers"); err == nil {
-			return candidate, true
+	for _, candidate := range []string{"/sys/fs/cgroup", "/sys/fs/cgroup/unified"} {
+		if path, ok := linuxCgroupV2Path(candidate); ok {
+			return path, true
 		}
 	}
 	return "", false
+}
+
+func linuxCgroupV2Path(candidate string) (string, bool) {
+	if candidate == "" {
+		return "", false
+	}
+	info, err := os.Stat(candidate)
+	if err != nil || !info.IsDir() {
+		return "", false
+	}
+	if _, err := os.Stat(candidate + "/cgroup.controllers"); err != nil {
+		return "", false
+	}
+	return candidate, true
 }
 
 func readKernelVersion() string {
@@ -349,6 +405,7 @@ func reportLinuxComponentHealth(preflight LinuxPreflightResult) {
 			"component":            "linux-runtime",
 			"runtime_mode":         preflight.RuntimeMode,
 			"enforcement_capable":  preflight.EnforcementCapable,
+			"enforcement_attached": preflight.EnforcementAttached,
 			"reason_description":   preflight.ReasonDescription,
 			"recommended_action":   preflight.RecommendedAction,
 			"policy_source":        preflight.PolicySource,

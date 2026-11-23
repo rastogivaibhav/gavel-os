@@ -30,6 +30,25 @@ jobs:
         # The generated-at-runtime eBPF loader satisfies attachEnforcer on CI.
         run: go test -v -count=1 -timeout=60s ./...
 
+      - name: Verify invalid policy cannot silently start an unprotected runtime
+        working-directory: enforcer
+        env:
+          GAVEL_MACHINE_KEY: ""
+          GAVEL_MONITORED_PIDS: "invalid-pid"
+        run: |
+          go build -o /tmp/gavel-enforcer .
+          set +e
+          timeout 10s /tmp/gavel-enforcer > /tmp/gavel-security-startup.log 2>&1
+          exit_status=$?
+          set -e
+          cat /tmp/gavel-security-startup.log
+          if [ "$exit_status" -eq 0 ] || [ "$exit_status" -eq 124 ]; then
+            echo "SECURITY FAILURE: invalid policy started or hung in an unprotected mode"
+            exit 1
+          fi
+          grep -q 'SECURITY BLOCKER' /tmp/gavel-security-startup.log
+
+
   # ── Python control plane tests ───────────────────────────────────────────────
   control-plane-test:
     name: Control Plane (Python)
@@ -59,6 +78,7 @@ jobs:
       - name: pytest with coverage
         env:
           ENV: development
+          PYTHONPATH: ${{ github.workspace }}/control-plane
           ALLOW_INSECURE_DEV_AUTH: "false"
           GAVEL_MACHINE_KEY: "ci-machine-key-32-bytes-xxxxxxxxx"
           API_SECRET_KEY: "ci-api-key"
@@ -146,3 +166,27 @@ jobs:
       - name: Build extension bundle
         working-directory: vscode-extension
         run: npm run build
+
+  # Security proof job: only branch-originated PRs in THIS repository.
+  # Never run arbitrary fork-contributed code with elevated kernel privileges.
+  kernel-denial-proof:
+    name: Kernel IPv4 Denial (ephemeral VM)
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/agent-security-boundary-roadmap-20261123' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: enforcer/go.mod
+          cache: true
+      - name: Compile kernel proof test
+        working-directory: enforcer
+        run: go test -c -o ../gavel-kernel.test .
+      - name: Assert real isolated cgroup/eBPF denial
+        run: |
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 45s ./gavel-kernel.test \
+            -test.run '^TestKernelConnect4Denial$' -test.v -test.timeout=40s

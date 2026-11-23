@@ -76,43 +76,44 @@ class EscalationService:
         decision: str,
         reason: str | None = None,
     ) -> tuple[bool, str]:
-        """Record approval decision on escalation.
+        """Atomically record an approval on an existing pending escalation.
 
-        Returns:
-            (success, reason_or_error)
+        Do not change status if the approval evidence cannot be persisted.
         """
         if decision not in ("approved", "denied"):
             return (False, "Invalid decision. Must be 'approved' or 'denied'")
 
         try:
             async with self.db_pool.acquire() as conn:
-                # Update escalation status
-                await conn.execute(
-                    """
-                    UPDATE escalations
-                    SET status = $1, updated_at = NOW()
-                    WHERE id = $2 AND tenant_id = $3
-                    """,
-                    decision,
-                    escalation_id,
-                    tenant_id,
-                )
+                async with conn.transaction():
+                    changed = await conn.fetchrow(
+                        """
+                        UPDATE escalations
+                        SET status = $1, updated_at = NOW()
+                        WHERE id = $2 AND tenant_id = $3 AND status = 'pending'
+                        RETURNING id
+                        """,
+                        decision,
+                        escalation_id,
+                        tenant_id,
+                    )
+                    if changed is None:
+                        return (False, "Escalation not found or no longer pending")
 
-                # Record approval decision
-                approval_id = f"appr_{uuid.uuid4().hex[:16]}"
-                await conn.execute(
-                    """
-                    INSERT INTO escalation_approvals
-                    (id, escalation_id, tenant_id, approver_id, decision, reason, created_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
-                    """,
-                    approval_id,
-                    escalation_id,
-                    tenant_id,
-                    approver_id,
-                    decision,
-                    reason,
-                )
+                    approval_id = f"appr_{uuid.uuid4().hex[:16]}"
+                    await conn.execute(
+                        """
+                        INSERT INTO escalation_approvals
+                        (id, escalation_id, tenant_id, approver_id, decision, reason, created_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                        """,
+                        approval_id,
+                        escalation_id,
+                        tenant_id,
+                        approver_id,
+                        decision,
+                        reason,
+                    )
             logger.info(f"Escalation {escalation_id} {decision} by {approver_id}")
             return (True, f"Escalation marked as {decision}")
         except Exception as e:
@@ -164,7 +165,7 @@ class EscalationService:
             async with self.db_pool.acquire() as conn:
                 rows = await conn.fetch(
                     """
-                    SELECT id, ticket_number, tool_call_id, agent_id, deadline
+                    SELECT id, ticket_number, tool_call_id, agent_id, deadline, status
                     FROM escalations
                     WHERE tenant_id = $1 AND status = $2
                     ORDER BY created_at DESC
