@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"os"
@@ -215,5 +216,9 @@ func parseIPv4(raw string) (uint32, error) {
 	if ip == nil {
 		return 0, fmt.Errorf("invalid IPv4 address %q", raw)
 	}
-	return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3]), nil
+	// bpf_sock_addr.user_ip4 contains network-order bytes. The BPF program
+	// loads them as a native-endian uint32, and Map.Put(uint32) writes the
+	// key in native-endian order. A big-endian numeric value mismatches
+	// the BPF lookup key on amd64/arm64.
+	return binary.NativeEndian.Uint32(ip), nil
 }
