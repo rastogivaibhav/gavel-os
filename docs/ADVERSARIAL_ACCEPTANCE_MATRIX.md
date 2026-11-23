@@ -18,7 +18,7 @@
 | T10 | Agent bypasses SDK and invokes socket directly | same kernel network hook | KERNEL_TESTED; direct test-process TCP connect without middleware, run 45285372144 | Kernel denial still enforced |
 | T11 | Semantic unauthorized API operation over allowed TLS connection | separate trusted gateway/API authorization | NOT UNIVERSALLY ENFORCED | Gateway blocks specific action; not attributed to kernel hook |
 | T12 | Windows denied destination | Native WFP Windows Firewall rules | IMPLEMENTED_UNVERIFIED; scope may be host-wide | OS firewall denies; no userspace-only fallback |
-| T13 | Control-plane outage and policy failure | local cached known-good controls / fail closed | BASELINE UNSAFE: Linux may enter audit-only | Cannot enter "protected" state with unprotected actions |
+| T13 | Control-plane outage and policy failure | local cached known-good controls / fail closed | PARTIAL in PR #9: enforce-required fail-stop before startup; live agent quarantine NOT IMPLEMENTED | Cannot enter "protected" state with unprotected actions |
 | T14 | Post-boot protection tampering by host root | signed protection + trusted boot assumptions | NOT_IMPLEMENTED | Explicit hardened root threat test |
 | T15 | Linux agent attempts kernel exploit | hardening/patching outside Gavel scope | OUT OF SCOPE FOR GENERAL EXPLOITS | Document boundary; no blanket claim |
 
@@ -49,3 +49,9 @@ No new claim of `kernel-enforced` for an operation until a real OS denial test p
 **Evidence:** [GitHub Actions run 45285372144](https://github.com/rastogivaibhav/gavel-os/actions/runs/45285372144), job **Kernel IPv4 Denial (ephemeral VM)**; commit `9d808d50023b645d63f2ca31615f88b342c1c284` (PR #9, unmerged). GitHub log shows `TestKernelConnect4Probe` and `TestKernelConnect4Denial` **PASS**, with direct TCP dial to permitted `127.0.0.1`, kernel `EPERM/EACCES` for forbidden `127.0.0.2`, and no connection observed at the denied listener. The job ran on an ephemeral Ubuntu 26.04.1 runner with read-only repository token and a dedicated test cgroup. The test uses an in-process constructed eBPF program and controlled single PID (not a real multi-agent workload). Go version 1.26.1. The exact kernel version and effective privileged-runner capabilities were **not captured** in this job and are needed in subsequent evidence.
 
 **Scope:** direct IPv4 TCP `connect4` only. This does not establish descendant identity, IPv6/UDP, filesystem/exec permissions, surviving enforcer termination or root-level integrity. Passing T01/T10 does not close M0 until startup and outage behavior are safe.
+
+## M0 enforce-required startup update — 2026-11-23 (T13 partial)
+
+Proposed branch [PR #9](https://github.com/rastogivaibhav/gavel-os/pull/9) introduces default enforcement-required startup, an explicitly unprotected `--audit-only` mode, rechecking policy before BPF attach, nonzero exit on policy or attachment failures, and an `enforcement_attached` status separate from preflight capability. Unit tests mock failed prerequisites, degraded control plane, policy race, missing BPF link and attachment failure; the CI enforcer job also asserts that a real invalid-policy executable invocation exits nonzero with a `SECURITY BLOCKER` message. **Tests must be verified green before marking CI_TESTED.**
+
+This is a **startup-fail-stop** improvement only; it does not deny connections for an agent that is already running separately when the daemon stops or its hook is detached. A secure agent/workload launcher or equivalent independent quarantine remains necessary before T13 can pass as an agent-boundary guarantee. Issue #3 stays open.
