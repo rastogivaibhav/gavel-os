@@ -5,7 +5,7 @@
 Gavel operates across two trust boundaries:
 
 **Boundary 1: OS kernel ↔ userspace**
-The enforcer's eBPF programs (Linux) and WFP callouts (Windows) run at the kernel level. Agent processes cannot bypass kernel-level enforcement from userspace, regardless of what the agent does to its own process memory, environment, or loaded libraries.
+Linux eBPF and Windows Firewall rules provide OS-mediated controls **for the operations and identities that are actually covered**. The current Linux prototype enforces selected IPv4 connect attempts for explicitly monitored PIDs. It does **not** automatically cover all child processes, IPv6, UDP, filesystem access or kernel-management actions. An agent can bypass uncovered paths, and an agent with sufficient privilege may tamper with enforcement until stronger integrity controls are delivered. Do not interpret the existence of a kernel hook as complete mediation.
 
 **Boundary 2: Enforcer host ↔ control plane**
 The enforcer and control plane run as separate processes, typically on separate hosts. The enforcer authenticates to the control plane using a pre-shared machine key. The control plane never trusts the enforcer's self-reported identity beyond what the machine key proves.
@@ -36,11 +36,33 @@ Admin tokens require `X-Admin-Secret` header in addition to the standard request
 
 The public key is available at `GET /auth/jwks` and `GET /.well-known/jwks.json`. Downstream services should cache this response (`Cache-Control: public, max-age=300`) and verify tokens locally without calling back to the control plane on every request.
 
-## Fail-Closed Default
+## Linux enforcement-required startup (not full fail-closed containment)
 
-When the control plane is unreachable, the enforcer **denies** all connections by default (`CONTROL_PLANE_UNAVAILABLE`). This is the correct posture for a security enforcement system — availability is sacrificed in favour of security.
+**Starting with the proposed M0 security branch**, the Linux executable requires enforcement by default:
 
-`GAVEL_FAIL_OPEN=true` inverts this. It must never be set in production.
+- Normal startup requires an enforce-ready preflight, a successfully fetched and nonempty policy, and a successful real eBPF attachment. A failure exits with a **nonzero status** and an explicit security error; there is no automatic audit-only daemon fallback.
+- `--audit-only` is an explicit operator opt-in to **unprotected observation**. It must not be used for a protected agent.
+- `--preflight` reports readiness requirements only; `enforcement_attached=false` until the program is actually attached. An actual successful attach and denial test is separate proof.
+- `enforcement_attached=true` is exposed in runtime component health metadata only after attachment succeeds.
+- A control-plane outage **before startup** prevents enforced mode from starting. An outage **after attachment** does not dynamically revoke/deny all traffic: the already loaded static policy remains in effect. No automatic secure policy refresh or invalidation is implemented yet.
+- `GAVEL_FAIL_OPEN` is **not** an eBPF kernel-denial switch. Do not use tool/gateway policy settings to infer OS enforcement behavior.
+
+**Safety boundary:** Refusing to start the enforcer does *not* stop a separate AI-agent process that someone launches independently. Nor is a kernel hook guaranteed to remain attached after the enforcer stops: cleanup currently detaches it. A future enforced workload launcher, independent workload supervisor or host quarantine is required before claiming \"fail-closed for a running agent\". Disable or stop protected agent launch independently whenever GavelOS is not verified active.
+
+**Operator commands:**
+
+```sh
+# Inspects prerequisites and policy, without proving kernel attachment:
+./gavel-enforcer --preflight
+
+# Enforces by default; exits nonzero if policy or kernel hook fails:
+./gavel-enforcer
+
+# Deliberately unprotected, diagnostic use ONLY:
+./gavel-enforcer --audit-only
+```
+
+See [Agent Security Boundary Programme](AGENT_SECURITY_BOUNDARY_PROGRAM.md), [Kernel Enforcement Proof](KERNEL_ENFORCEMENT_PROOF.md), and issue #3 for the remaining hard fail-closed/agent-launch guarantees.
 
 ## Audit Ledger Integrity
 
@@ -84,7 +106,7 @@ Limits are enforced in Redis when `REDIS_URL` is set (shared across replicas). I
 
 - **macOS enforcement is audit-only.** The macOS runtime cannot block connections. Do not rely on Gavel for enforcement on macOS hosts.
 - **The audit ledger is tamper-evident, not tamper-proof.** A database superuser can bypass the `NO UPDATE / NO DELETE` rules.
-- **The control plane is a single point of failure** unless deployed with multiple replicas behind a load balancer. The enforcer's fail-closed default means a control plane outage blocks all agent network activity.
+- **Control-plane outage:** Linux enforced startup now aborts when required policy cannot be obtained, but already-running eBPF filters keep their last-loaded policy, and independently running agents are not quarantined. Do not claim an outage blocks all agent network activity.
 - **IPv6 is not supported** in the Linux eBPF enforcer. The eBPF program operates on IPv4 addresses only.
 - **The Windows WFP enforcer uses PowerShell** for firewall rule management. PowerShell execution policy restrictions on hardened hosts may prevent enforcement.
 
