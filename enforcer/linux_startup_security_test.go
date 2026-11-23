@@ -4,6 +4,8 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -125,5 +127,33 @@ func TestAuditOnlyRequiresExplicitOperatorFlagPath(t *testing.T) {
 	}
 	if status.ReasonDescription == "" || status.RecommendedAction == "" {
 		t.Fatal("intentional audit-only requires visible warning and action")
+	}
+}
+
+func TestExplicitCgroupPathNeverFallsBackToRoot(t *testing.T) {
+	t.Setenv("GAVEL_CGROUP_PATH", t.TempDir())
+	path, ok := resolveLinuxCgroupPath()
+	if ok || path != "" {
+		t.Fatalf("invalid explicit cgroup scope must fail closed, got %q %t", path, ok)
+	}
+}
+
+func TestExplicitCgroupPathIsPreservedWhenValid(t *testing.T) {
+	fake := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fake, "cgroup.controllers"), []byte("cpu io"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GAVEL_CGROUP_PATH", fake)
+	path, ok := resolveLinuxCgroupPath()
+	if !ok || path != fake {
+		t.Fatalf("explicit cgroup selection was lost: %q %t", path, ok)
+	}
+}
+
+func TestExplicitEmptyCgroupDoesNotDefaultToRoot(t *testing.T) {
+	t.Setenv("GAVEL_CGROUP_PATH", "")
+	path, ok := resolveLinuxCgroupPath()
+	if ok || path != "" {
+		t.Fatalf("explicit empty cgroup scope must fail, got %q %t", path, ok)
 	}
 }
