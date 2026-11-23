@@ -59,6 +59,7 @@ jobs:
       - name: pytest with coverage
         env:
           ENV: development
+          PYTHONPATH: ${{ github.workspace }}/control-plane
           ALLOW_INSECURE_DEV_AUTH: "false"
           GAVEL_MACHINE_KEY: "ci-machine-key-32-bytes-xxxxxxxxx"
           API_SECRET_KEY: "ci-api-key"
