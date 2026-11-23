@@ -286,3 +286,21 @@ func TestLinuxEnforcerConfigFromRuntimePolicyWithoutProxy(t *testing.T) {
 		t.Fatalf("expected proxy to remain disabled")
 	}
 }
+
+// A runtime-generated loader must be eligible for the real attach attempt.
+// Actual kernel attach/deny behaviour requires privileged integration testing.
+func TestLinuxEBPFProgramReady(t *testing.T) {
+	for _, tc := range []struct {
+		status string
+		want   bool
+	}{
+		{"runtime-generated", true},
+		{"available", true},
+		{"unavailable", false},
+		{"", false},
+	} {
+		if got := linuxEBPFProgramReady(tc.status); got != tc.want {
+			t.Fatalf("linuxEBPFProgramReady(%q) = %t, want %t", tc.status, got, tc.want)
+		}
+	}
+}
