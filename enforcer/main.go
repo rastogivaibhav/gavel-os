@@ -171,7 +171,10 @@ func runLinuxPreflight() LinuxPreflightResult {
 
 	hasPrivilege := result.HasCapBPF || result.HasCapSysAdmin
 	result.EnforcementCapable = archSupported && cgroupV2 && hasPrivilege && memlockReady
-	ebpfReady := result.EBPFProgramStatus == "available" && memlockReady
+	// The shipping Linux loader constructs BPF instructions at runtime; it does not
+	// ship a generated object named "available". Actual load/attach is tested
+	// in attachEnforcer; this check only identifies a supported loader mode.
+	ebpfReady := linuxEBPFProgramReady(result.EBPFProgramStatus) && memlockReady
 
 	config, controlPlaneStatus, policyErr := resolveLinuxRuntimePolicy(result)
 	result.ControlPlaneStatus = controlPlaneStatus
@@ -200,6 +203,13 @@ func runLinuxPreflight() LinuxPreflightResult {
 	result.ReasonDescription = linuxReasonDescription(result.ReasonCode)
 	result.RecommendedAction = linuxRecommendedAction(result.ReasonCode)
 	return result
+}
+
+// linuxEBPFProgramReady reports whether the executable includes a usable BPF
+// loader implementation. This is not evidence that a BPF program has loaded
+// or attached; callers must verify attachEnforcer succeeds separately.
+func linuxEBPFProgramReady(status string) bool {
+	return status == "available" || status == "runtime-generated"
 }
 
 func resolveLinuxRuntimePolicy(preflight LinuxPreflightResult) (LinuxEnforcerConfig, string, error) {
