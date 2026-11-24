@@ -117,7 +117,7 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		UseCgroupFD: true,
 		CgroupFD: int(cgfd.Fd()),
-		Credential: &syscall.Credential{Uid: uid, Gid: gid, NoSetGroups: true},
+		Credential: &syscall.Credential{Uid: uid, Gid: gid, Groups: []uint32{}, NoSetGroups: false},
 		Pdeathsig: syscall.SIGKILL,
 	}
 	if err := cmd.Start(); err != nil {

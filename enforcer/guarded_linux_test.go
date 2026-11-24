@@ -77,6 +77,10 @@ func guardedDial(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Fatal("test workload unexpectedly runs with root privileges")
 	}
+	groups, err := os.Getgroups()
+	if err != nil || len(groups) != 0 {
+		t.Fatalf("SECURITY FAILURE: inherited supplementary groups: %v (%v)", groups, err)
+	}
 	if data, err := os.ReadFile("/proc/self/cgroup"); err != nil || !strings.Contains(string(data), "gavel-agent-") {
 		t.Fatalf("workload not inside isolated protected cgroup: %q %v", string(data), err)
 	}
