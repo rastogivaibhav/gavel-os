@@ -81,6 +81,21 @@ func guardedDial(t *testing.T) {
 	if err != nil || len(groups) != 0 {
 		t.Fatalf("SECURITY FAILURE: inherited supplementary groups: %v (%v)", groups, err)
 	}
+	status, err := os.ReadFile("/proc/self/status")
+	if err != nil { t.Fatal(err) }
+	fields := map[string]string{}
+	for _, line := range strings.Split(string(status), "\n") {
+		key, value, ok := strings.Cut(line, ":")
+		if ok { fields[key] = strings.TrimSpace(value) }
+	}
+	if fields["NoNewPrivs"] != "1" {
+		t.Fatal("SECURITY FAILURE: no_new_privs not active")
+	}
+	for _, key := range []string{"CapInh", "CapPrm", "CapEff", "CapAmb"} {
+		if fields[key] != "0000000000000000" {
+			t.Fatalf("SECURITY FAILURE: %s=%q", key, fields[key])
+		}
+	}
 	if data, err := os.ReadFile("/proc/self/cgroup"); err != nil || !strings.Contains(string(data), "gavel-agent-") {
 		t.Fatalf("workload not inside isolated protected cgroup: %q %v", string(data), err)
 	}

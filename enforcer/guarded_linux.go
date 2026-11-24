@@ -108,7 +108,19 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	}
 	defer cgfd.Close()
 
-	cmd := exec.Command(argv[0], argv[1:]...)
+	// A fixed host-trusted util-linux launcher sets irreversible no_new_privs
+	// before executing the workload. Never resolve it through agent PATH.
+	launcher := "/usr/bin/setpriv"
+	info, err := os.Stat(launcher)
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: trusted setpriv unavailable: %w", err)
+	}
+	owner, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || owner.Uid != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 {
+		return fmt.Errorf("SECURITY BLOCKER: setpriv must be a trusted root-owned executable")
+	}
+	args := append([]string{"--no-new-privs", "--inh-caps=-all", "--ambient-caps=-all", "--"}, argv...)
+	cmd := exec.Command(launcher, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.Env = guardedWorkloadEnvironment(os.Environ())
 	// Atomic cgroup assignment at process creation eliminates the interval
@@ -186,7 +198,8 @@ func guardedWorkloadEnvironment(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, entry := range env {
 		// The agent must not inherit the supervisor's policy or machine secrets.
-		if strings.HasPrefix(entry, "GAVEL_MACHINE_KEY=") ||
+		if strings.HasPrefix(entry, "LD_") ||
+			strings.HasPrefix(entry, "GAVEL_MACHINE_KEY=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_UID=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_GID=") ||
 			strings.HasPrefix(entry, "GAVEL_BLOCKED_IPS=") ||
