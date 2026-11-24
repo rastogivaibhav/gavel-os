@@ -180,6 +180,7 @@ func guardedWorkloadEnvironment(env []string) []string {
 			strings.HasPrefix(entry, "GAVEL_AGENT_UID=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_GID=") ||
 			strings.HasPrefix(entry, "GAVEL_BLOCKED_IPS=") ||
+			strings.HasPrefix(entry, "GAVEL_BLOCKED_IPV6=") ||
 			strings.HasPrefix(entry, "GAVEL_MONITORED_PIDS=") ||
 			strings.HasPrefix(entry, "GAVEL_ENGINE_URL=") ||
 			strings.HasPrefix(entry, "GAVEL_PROXY_") ||
