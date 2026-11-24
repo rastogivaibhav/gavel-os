@@ -202,6 +202,10 @@ jobs:
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
             -test.run TestKernelGuardedAgentAndDescendants -test.v -test.timeout=55s
+      - name: Assert IPv6 kernel deny is inherited by agent child
+        run: |
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 75s /tmp/gavel-kernel.test \
+            -test.run TestKernelGuardedIPv6AndDescendants -test.v -test.timeout=70s
       - name: Assert pinned kernel protection survives supervisor SIGKILL
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 85s /tmp/gavel-kernel.test \
