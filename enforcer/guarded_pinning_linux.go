@@ -163,9 +163,8 @@ func recoverGuardedAgent(name string) error {
 		return fmt.Errorf("cannot resolve protected cgroup parent")
 	}
 	cgroup := filepath.Join(parent, name)
-	info, err := os.Lstat(cgroup)
-	if err != nil || !info.IsDir() {
-		return fmt.Errorf("protected cgroup missing or invalid %s: %w", cgroup, err)
+	if err := validateGuardedCgroup(cgroup); err != nil {
+		return fmt.Errorf("protected cgroup missing or untrusted %s: %w", cgroup, err)
 	}
 	// Do not remove the only remaining enforcement attachment when we
 	// cannot stop the processes it protects.

@@ -223,4 +223,5 @@ jobs:
       - name: Assert actual privilege escalation and sibling cgroup migration denial
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedContainment$' -test.v -test.timeout=55s
+            -test.run '^TestKernelGuarded(Containment|RejectsDelegatedCgroup) -test.v -test.timeout=55s
+ -test.v -test.timeout=55s
