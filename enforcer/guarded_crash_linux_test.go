@@ -154,6 +154,7 @@ func TestKernelSupervisorSIGKILLRetainsBPF(t *testing.T) {
 	t.Setenv("GAVEL_GUARD_DENIED_ADDR", denied.Addr().String())
 	t.Setenv("GAVEL_CRASH_TEST_DIR", dir)
 	t.Setenv("GAVEL_CRASH_SUPERVISOR_HELPER", "1")
+	t.Setenv("GAVEL_CRASH_AGENT_HELPER", "1")
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
