@@ -5,7 +5,7 @@
 Gavel operates across two trust boundaries:
 
 **Boundary 1: OS kernel ↔ userspace**
-Linux eBPF and Windows Firewall rules provide OS-mediated controls **for the operations and identities that are actually covered**. The current Linux prototype enforces selected IPv4 connect attempts for explicitly monitored PIDs. It does **not** automatically cover all child processes, IPv6, UDP, filesystem access or kernel-management actions. An agent can bypass uncovered paths, and an agent with sufficient privilege may tamper with enforcement until stronger integrity controls are delivered. Do not interpret the existence of a kernel hook as complete mediation.
+Linux eBPF and Windows Firewall rules provide OS-mediated controls **for the operations and identities that are actually covered**. The Linux prototype enforces selected IPv4 and IPv6 TCP connect attempts at cgroup hooks for either explicitly monitored PIDs or tasks deliberately launched in a protected cgroup. Only guarded cgroup launch guarantees descendants inherit these restrictions. It does **not** cover IPv4/IPv6 UDP sendmsg, preconnected descriptors, raw sockets, general filesystem access or kernel-management operations. An agent can bypass uncovered paths, and an agent with sufficient privilege may tamper with enforcement until stronger integrity controls are delivered. Do not interpret the existence of a kernel hook as complete mediation.
 
 **Boundary 2: Enforcer host ↔ control plane**
 The enforcer and control plane run as separate processes, typically on separate hosts. The enforcer authenticates to the control plane using a pre-shared machine key. The control plane never trusts the enforcer's self-reported identity beyond what the machine key proves.
@@ -107,7 +107,7 @@ Limits are enforced in Redis when `REDIS_URL` is set (shared across replicas). I
 - **macOS enforcement is audit-only.** The macOS runtime cannot block connections. Do not rely on Gavel for enforcement on macOS hosts.
 - **The audit ledger is tamper-evident, not tamper-proof.** A database superuser can bypass the `NO UPDATE / NO DELETE` rules.
 - **Control-plane outage:** Linux enforced startup now aborts when required policy cannot be obtained, but already-running eBPF filters keep their last-loaded policy, and independently running agents are not quarantined. Do not claim an outage blocks all agent network activity.
-- **IPv6 is not supported** in the Linux eBPF enforcer. The eBPF program operates on IPv4 addresses only.
+- **IPv6 TCP connect6 is implemented** on the proposed IPv6 branch and live kernel-tested for guarded cgroup tasks and fork/exec descendants ([CI evidence](https://github.com/rastogivaibhav/gavel-os/actions/runs/45347852581)). UDP/sendmsg6, raw sockets, IPv4-mapped behavior and inherited connected sockets remain unprotected and require additional tests. Privileged attackers may detach links or move tasks.
 - **The Windows WFP enforcer uses PowerShell** for firewall rule management. PowerShell execution policy restrictions on hardened hosts may prevent enforcement.
 
 ## Reporting Vulnerabilities
