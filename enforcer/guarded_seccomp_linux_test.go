@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -27,6 +28,13 @@ func checkGuardedSyscallPolicy(t *testing.T) {
 			t.Fatalf("blocked syscall %d returned %v, expected EPERM", nr, errno)
 		}
 	}
+	// Attempt namespace creation through the traditional clone path, using
+	// an inert child. No privileged operation or host mutation is requested.
+	child := exec.Command("/bin/true")
+	child.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWUSER}
+	if err := child.Run(); !errors.Is(err, unix.EPERM) {
+		t.Fatalf("namespace clone must be denied: %v", err)
+	}
 	// Ordinary clone is required by the Go runtime and exec descendants.
 	// Verify clone3 is explicitly unavailable without creating a new task.
 	_, _, errno := unix.RawSyscall(unix.SYS_CLONE3, 0, 0, 0)
@@ -42,6 +50,7 @@ func checkGuardedSyscallPolicy(t *testing.T) {
 		if fd >= 0 { unix.Close(fd) }
 		if !errors.Is(err, unix.EPERM) { t.Fatalf("socket policy %+v: %v", c, err) }
 	}
+	if err := exec.Command("/bin/true").Run(); err != nil { t.Fatalf("ordinary descendant execution: %v", err) }
 	for _, family := range []int{unix.AF_INET, unix.AF_INET6, unix.AF_UNIX} {
 		fd, err := unix.Socket(family, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 		if err != nil { t.Fatalf("allowed socket %d: %v", family, err) }
@@ -77,4 +86,13 @@ func TestGuardedSeccompSealsAndKernelExecution(t *testing.T) {
 	if err != nil || !strings.Contains(string(out), "PASS: TestGuardedSeccompProbe") {
 		t.Fatalf("seccomp child failed: %v\n%s", err, out)
 	}
+}
+
+func TestGuardedSeccompInvalidFilterFailsClosed(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "invalid-filter")
+	if err != nil { t.Fatal(err) }
+	defer f.Close()
+	if _, err := f.Write([]byte{1, 2, 3}); err != nil { t.Fatal(err) }
+	cmd := exec.Command("/usr/bin/setpriv", "--no-new-privs", "--seccomp-filter", f.Name(), "--", "/bin/true")
+	if err := cmd.Run(); err == nil { t.Fatal("invalid syscall filter allowed payload execution") }
 }
