@@ -32,6 +32,7 @@ type RuntimePolicyResponse struct {
 	ReasonCode         string   `json:"reason_code"`
 	MonitoredPIDs      []uint32 `json:"monitored_pids"`
 	BlockedIPv4        []string `json:"blocked_ipv4"`
+	BlockedIPv6        []string `json:"blocked_ipv6"`
 	BlockedTargets     []string `json:"blocked_targets"`
 	MonitoredProcesses []string `json:"monitored_processes"`
 	ProxyIPv4          string   `json:"proxy_ipv4"`
