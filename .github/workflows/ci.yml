@@ -183,6 +183,12 @@ jobs:
         with:
           go-version-file: enforcer/go.mod
           cache: true
+      - name: Mount bpffs for persistent kernel link tests
+        run: |
+          if ! mountpoint -q /sys/fs/bpf; then
+            sudo mount -t bpf bpf /sys/fs/bpf
+          fi
+          findmnt -n -o FSTYPE --target /sys/fs/bpf | grep -qx bpf
       - name: Compile kernel proof test
         working-directory: enforcer
         run: |
@@ -195,4 +201,10 @@ jobs:
       - name: Assert agent and descendant inherit kernel cgroup denial
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedAgentAndDescendants$' -test.v -test.timeout=55s
+            -test.run '^TestKernelGuardedAgentAndDescendants
+ -test.v -test.timeout=55s
+      - name: Assert pinned kernel protection survives supervisor SIGKILL
+        run: |
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 85s /tmp/gavel-kernel.test \
+            -test.run '^TestKernelSupervisorSIGKILLRetainsBPF
+ -test.v -test.timeout=80s
