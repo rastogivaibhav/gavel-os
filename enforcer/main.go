@@ -72,6 +72,22 @@ type LinuxRuntimeEvent struct {
 }
 
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "run" {
+		if err := runGuardedAgent(os.Args[2:]); err != nil {
+			log.Fatalf("SECURITY BLOCKER: guarded agent run failed: %v", err)
+		}
+		return
+	}
+	if len(os.Args) >= 2 && os.Args[1] == "recover" {
+		if len(os.Args) != 3 {
+			log.Fatal("usage: gavel-enforcer recover <gavel-agent-NAME>; requires trusted privileged operator")
+		}
+		if err := recoverGuardedAgent(os.Args[2]); err != nil {
+			log.Fatalf("SECURITY BLOCKER: protected workload recovery failed: %v", err)
+		}
+		log.Printf("guarded workload %s recovered: terminated, unpinned and removed", os.Args[2])
+		return
+	}
 	preflightOnly := flag.Bool("preflight", false, "print runtime preflight and exit")
 	auditOnly := flag.Bool("audit-only", false, "explicitly start in UNPROTECTED audit-only mode; never use for protected agents")
 	flag.Parse()

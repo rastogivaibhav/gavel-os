@@ -171,7 +171,7 @@ jobs:
   # Never run arbitrary fork-contributed code with elevated kernel privileges.
   kernel-denial-proof:
     name: Kernel IPv4 Denial (ephemeral VM)
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/agent-security-boundary-roadmap-20261123' }}
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/linux-guarded-cgroup-workload-20261123' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -183,10 +183,26 @@ jobs:
         with:
           go-version-file: enforcer/go.mod
           cache: true
+      - name: Mount bpffs for persistent kernel link tests
+        run: |
+          if ! mountpoint -q /sys/fs/bpf; then
+            sudo mount -t bpf bpf /sys/fs/bpf
+          fi
+          findmnt -n -o FSTYPE --target /sys/fs/bpf | grep -qx bpf
       - name: Compile kernel proof test
         working-directory: enforcer
-        run: go test -c -o ../gavel-kernel.test .
+        run: |
+          go test -c -o /tmp/gavel-kernel.test .
+          chmod 755 /tmp/gavel-kernel.test
       - name: Assert real isolated cgroup/eBPF denial
         run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 45s ./gavel-kernel.test \
-            -test.run '^TestKernelConnect4Denial$' -test.v -test.timeout=40s
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 45s /tmp/gavel-kernel.test \
+            -test.run TestKernelConnect4Denial -test.v -test.timeout=40s
+      - name: Assert agent and descendant inherit kernel cgroup denial
+        run: |
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
+            -test.run TestKernelGuardedAgentAndDescendants -test.v -test.timeout=55s
+      - name: Assert pinned kernel protection survives supervisor SIGKILL
+        run: |
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 85s /tmp/gavel-kernel.test \
+            -test.run TestKernelSupervisorSIGKILLRetainsBPF -test.v -test.timeout=80s

@@ -35,6 +35,9 @@ type LinuxEnforcerConfig struct {
 	MonitoredPIDs []uint32
 	BlockedIPv4   []uint32
 	Proxy         LinuxProxyConfig
+	// ProtectAll enforces the policy for ALL tasks in the attached cgroup,
+	// including fork/exec descendants. Only enable on a dedicated child cgroup.
+	ProtectAll    bool
 }
 
 func linuxPolicySource(machineKey string) string {
@@ -156,7 +159,7 @@ func loadLinuxEnforcerConfigFromEnv() (LinuxEnforcerConfig, error) {
 }
 
 func linuxPolicyConfigured(config LinuxEnforcerConfig) bool {
-	return len(config.MonitoredPIDs) > 0 && (len(config.BlockedIPv4) > 0 || config.Proxy.Enabled == 1)
+	return (config.ProtectAll || len(config.MonitoredPIDs) > 0) && (len(config.BlockedIPv4) > 0 || config.Proxy.Enabled == 1)
 }
 
 func linuxEnforcerConfigFromRuntimePolicy(policy RuntimePolicyResponse) (LinuxEnforcerConfig, error) {
