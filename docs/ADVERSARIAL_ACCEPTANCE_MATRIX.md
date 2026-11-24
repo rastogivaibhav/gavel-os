@@ -91,3 +91,7 @@ Native unconnected UDP tests passed in [run 45434260219](https://github.com/rast
 ## Seccomp containment extension (implemented, unverified)
 
 PR #14 adds mandatory seccomp before untrusted exec, scoped namespace/syscall and alternate socket family restrictions. T08/T09 remain open until kernel tests and additional tamper probes are complete. No namespace-isolation, full network mediation or host-root protection claim.
+
+## Filesystem and executable enforcement (T05–T07, implemented unverified)
+
+Stacked Landlock branch introduces opt-in host-supplied JSON read/write/execute allowlists through GAVEL_AGENT_FS_POLICY. A configured policy requires ABI >=3 and supported setpriv, rejects invalid or unresolved rules, does not downgrade, and applies before untrusted exec. Native executable rights cannot overlap configured writable paths. Explicitly handles file read/write/truncate, directory enumeration, remove, create, refer and execute. CI positive control must show ordinary DAC permits access to synthetic fixtures; guarded parent and descendant must deny forbidden operations and permit approved read/write/exec, with post-test filesystem state checks. Filesystem policy is not active on legacy launches without the environment setting. Landlock does not restrict pre-opened descriptors, all metadata operations, interpreter semantics, trusted helper access, or host-root actions. Independent verification pending.

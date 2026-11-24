@@ -38,6 +38,10 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	if err != nil {
 		return err
 	}
+	fsArgs, err := guardedFilesystemArguments()
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: filesystem policy: %w", err)
+	}
 	preflight := runLinuxPreflight()
 	if !preflight.EnforcementCapable || !linuxEBPFProgramReady(preflight.EBPFProgramStatus) || !preflight.CgroupV2 {
 		return fmt.Errorf("SECURITY BLOCKER: kernel or cgroup preflight failed: %s", preflight.ReasonCode)
@@ -140,8 +144,15 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	args := append([]string{
 		"--no-new-privs", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all",
 		"--reuid="+strconv.FormatUint(uint64(uid), 10), "--regid="+strconv.FormatUint(uint64(gid), 10),
-		"--clear-groups", "--pdeathsig", "keep", "--seccomp-filter", "/proc/self/fd/3", "--",
-	}, argv...)
+		"--clear-groups", "--pdeathsig", "keep", "--seccomp-filter", "/proc/self/fd/3",
+	}, fsArgs...)
+	args = append(args, "--")
+	args = append(args, argv...)
+	if len(fsArgs) != 0 {
+		log.Print("guarded launch requires Landlock filesystem allowlist")
+	} else {
+		log.Print("guarded launch: filesystem policy not configured; filesystem access is not governed by GavelOS")
+	}
 	cmd := exec.Command(launcher, args...)
 	// FD 3 contains only the immutable public filter, never a privileged socket.
 	cmd.ExtraFiles = []*os.File{filter}
@@ -228,6 +239,7 @@ func guardedWorkloadEnvironment(env []string) []string {
 			strings.HasPrefix(entry, "LOCPATH=") ||
 			strings.HasPrefix(entry, "NLSPATH=") ||
 			strings.HasPrefix(entry, "TZDIR=") ||
+			strings.HasPrefix(entry, "GAVEL_AGENT_FS_POLICY=") ||
 			strings.HasPrefix(entry, "GAVEL_MACHINE_KEY=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_UID=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_GID=") ||
