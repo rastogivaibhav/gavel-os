@@ -20,6 +20,7 @@ ALLOWED_METADATA_KEYS = {
     "status",
     "runtime_mode",
     "enforcement_capable",
+    "enforcement_attached",
     # ── Performance / diagnostics ─────────────────────────────────────────────
     "latency_ms",
     "error_class",
@@ -45,6 +46,7 @@ ALLOWED_METADATA_KEYS = {
     "control_plane_status",
     "monitored_pid_count",
     "blocked_ipv4_count",
+    "blocked_ipv6_count",
     "proxy_redirect",
     "reason_description",
     "recommended_action",
