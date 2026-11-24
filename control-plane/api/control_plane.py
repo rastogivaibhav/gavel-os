@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from ipaddress import IPv4Address
+from ipaddress import IPv4Address, IPv6Address
 
 from fastapi import HTTPException, Request
 
@@ -178,6 +178,18 @@ def _normalize_ipv4_values(values: list[str]) -> list[str]:
     return normalized
 
 
+def _normalize_ipv6_values(values: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for value in values:
+        try:
+            address = IPv6Address(value)
+            if address.ipv4_mapped is None:
+                normalized.append(str(address))
+        except ValueError:
+            continue
+    return normalized
+
+
 def build_runtime_policy(
     *,
     app,
@@ -195,6 +207,7 @@ def build_runtime_policy(
 
     monitored_pids = _int_csv_env("GAVEL_RUNTIME_MONITORED_PIDS")
     blocked_ipv4 = _normalize_ipv4_values(_csv_env("GAVEL_RUNTIME_BLOCKED_IPS"))
+    blocked_ipv6 = _normalize_ipv6_values(_csv_env("GAVEL_RUNTIME_BLOCKED_IPV6"))
     blocked_targets = _csv_env("GAVEL_RUNTIME_BLOCKED_TARGETS")
     monitored_processes = _csv_env("GAVEL_RUNTIME_MONITORED_PROCESSES")
     proxy_ipv4 = None
@@ -215,7 +228,7 @@ def build_runtime_policy(
             proxy_port = None
 
     if normalized_runtime_os == "linux":
-        # Linux eBPF runtime currently consumes IPv4 targets only.
+        # Linux consumes blocked IPv4 and IPv6 literals; hostname targets remain unsupported.
         blocked_targets = []
     elif normalized_runtime_os == "windows":
         # Windows can consume both hostnames and literal IPs; fold IPs into the target set.
@@ -225,6 +238,7 @@ def build_runtime_policy(
         (
             monitored_pids,
             blocked_ipv4,
+            blocked_ipv6,
             blocked_targets,
             monitored_processes,
             proxy_ipv4 and proxy_port,
@@ -246,6 +260,7 @@ def build_runtime_policy(
         reason_code=reason_code,
         monitored_pids=monitored_pids,
         blocked_ipv4=blocked_ipv4,
+        blocked_ipv6=blocked_ipv6,
         blocked_targets=blocked_targets,
         monitored_processes=monitored_processes,
         proxy_ipv4=proxy_ipv4,
