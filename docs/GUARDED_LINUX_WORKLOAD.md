@@ -27,10 +27,10 @@ The executable path must be absolute; the command is executed without a shell. `
 The parent process:
 
 1. Validates kernel capabilities, cgroup v2 and an enforceable policy.
-2. Creates a **new isolated child cgroup** containing no processes.
-3. Loads and attaches the `connect4` program to that child cgroup with `ProtectAll` enabled.
+2. Creates a **new isolated child cgroup** containing no processes; requires a mounted bpffs at `/sys/fs/bpf` and a protected root-owned `/sys/fs/bpf/gavel-agents` directory (mode `0700`).
+3. Loads and attaches the `connect4` program with `ProtectAll` enabled, **pins its modern BPF link in bpffs**, and refuses to launch the agent if pinning fails or only legacy non-pinnable attachment is supported.
 4. Starts the unprivileged agent via Linux `CLONE_INTO_CGROUP` (Go `UseCgroupFD`), with **no fallback to fork-then-move** if the kernel rejects atomic assignment.
-5. On normal termination, uses `cgroup.kill` to terminate descendants, waits until the group is unpopulated, then detaches BPF and removes the group.
+5. On normal termination, uses `cgroup.kill` to terminate descendants, waits until the group is unpopulated, then unpins BPF and removes the group. On supervisor `SIGKILL`, the pinned kernel restriction remains even if an orphaned grandchild is alive.
 
 ### Acceptance evidence
 
@@ -47,19 +47,46 @@ The test checks both the unprivileged parent **and a fork/exec child**: permitte
 
 The PR's privileged GitHub Actions proof job runs this exact test. It must **PASS in a real Linux runner** before `KERNEL_TESTED` is claimed; Go unit tests alone are insufficient.
 
+## Crash-resistant enforcement and trusted recovery
+
+On supported kernels, the guarded launcher requires a **pinned** cgroup BPF link before agent execution, rather than relying on a process-owned file descriptor. An unexpected supervisor `SIGKILL` does not automatically detach the pinned kernel hook. An orphaned, unprivileged agent descendant remains constrained by the IPv4 `connect4` policy until a trusted recovery process stops the entire cgroup.
+
+**Requirement:** `/sys/fs/bpf` must already be mounted as bpffs before starting the launcher. A disposable Linux test VM can use `sudo mount -t bpf bpf /sys/fs/bpf` if necessary. Do not auto-mount bpffs on production hosts via an AI agent.
+
+When the GavelOS supervisor dies, a privileged host operator or a separately supervised trusted recovery service can run:
+
+```sh
+sudo /usr/local/bin/gavel-enforcer recover gavel-agent-123456
+```
+
+Replace the identifier with the **actual generated protected cgroup basename**, visible in `/sys/fs/cgroup` or the supervisor's audited startup logs. The command validates the name, signals `cgroup.kill`, confirms `cgroup.events` reports `populated 0`, loads/unpins the BPF link, and removes the empty cgroup. It **does not** unpin the security link if it cannot establish that the protected workload has stopped.
+
+Use the same `GAVEL_CGROUP_PATH` parent for launch and recovery when a nondefault cgroup-v2 parent was configured. Do not grant the agent access to the bpffs pin directory or cgroup controllers.
+
+### Live SIGKILL test
+
+On the isolated, restricted GitHub Actions runner (or your own disposable Linux VM) run:
+
+```sh
+sudo env GAVEL_RUN_KERNEL_TESTS=1 /tmp/gavel-kernel.test \
+  -test.run TestKernelSupervisorSIGKILLRetainsBPF -test.v -test.timeout=80s
+```
+
+The test launches an unprivileged agent with a fork/exec grandchild, proves pre-crash kernel denial, SIGKILLs the trusted supervisor, and requires the surviving grandchild to receive a **second actual kernel EPERM/EACCES**. Then independent root recovery must kill the protected cgroup and remove the pin/cgroup with no remnants. A green unit test without the privileged job is not sufficient evidence.
+
 ## Threat model and known exclusions
 
-- **Network scope only:** `cgroup/connect4` IPv4 TCP connect. The current implementation **does not** block IPv6, UDP, preexisting socket descriptors, AF_UNIX, filesystem access, exec, kernel operations or semantic abuse of an allowed TLS endpoint.
-- **No survival of hostile supervisor termination:** eBPF link ownership remains in the supervisor process; SIGKILL, crash, or a privileged attacker unloading the link could leave other descendants running without its policy. `Pdeathsig` kills only the direct child, not arbitrary grandchildren. A pinned/protected kernel link, systemd binding or out-of-process watchdog and proof of crash containment is necessary before claiming fail-closed operation if the supervisor is killed.
-- **Agent is assumed nonroot:** The launched agent is forced to a designated UID/GID; it must not have privileges to write cgroups or eBPF state. No guarantee against root escalation or a kernel exploit.
-- **Operational failure:** If `cgroup.kill` or empty-group verification fails, the runner reports a security-critical error. **Do not assume that error by itself preserves enforcement after supervisor process exit.** Treat it as a blocker to safe production use.
-- **No general workload sandbox:** The environment is not a full process namespace, filesystem or seccomp sandbox. Network policy is not a substitute for container isolation.
+- **Network scope only:** `cgroup/connect4` IPv4 TCP connect; no protection yet for IPv6, UDP, inherited connected sockets, AF_UNIX, filesystem, exec policies, kernel operations or semantic misuse of an approved endpoint.
+- **Protection survives supervisor SIGKILL only with a supported pinned link:** It is still not safe against arbitrary privileged root who can remove pins, change cgroup membership or manipulate BPF. A complete independent always-on recovery/watchdog service, crash-loop handling and anti-escape cgroup ownership policy remain future work.
+- **Agent is assumed nonroot:** Launched agents are forced to specified nonzero UID/GID and must not have the privileges required to modify protected cgroups or eBPF links.
+- **No complete sandbox:** These controls do not supply filesystem isolation, separate network namespaces, seccomp enforcement or a general agent privilege boundary.
+- **Recovery must be verified:** If `cgroup.kill` or empty-group verification fails, leave the pinned policy attached and report a security-critical error. Do not unpin while active tasks remain.
 
-**Engineering status:** prototype targeting M1 and T02 of `docs/ADVERSARIAL_ACCEPTANCE_MATRIX.md`. This is not production-ready until test evidence and failure-mode hardening are completed.
+**Engineering status:** experimental M1/M4 proof, pending the privileged SIGKILL-and-recovery acceptance test on the PR branch. Do not imply production readiness or tamper-proof enforcement.
 
 ## Next hardening work
 
-1. Pin or otherwise independently own enforcement links so the policy remains attached after supervisor failure, and make link cleanup possible only after cgroup emptiness is verified.
+1. Independently supervise recovery on host crash/restart; verify the BPF pin and protected cgroup are discoverable after supervisor termination and failures cannot orphan workloads forever.
 2. Add cgroup-owned and verifiable workload admission, preventing agents from escaping the cgroup via writable cgroup controllers.
 3. Cover IPv6 and UDP and test namespace/cgroup escape attempts.
 4. Verify proper credential/capability dropping and protected policy identities.
