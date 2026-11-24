@@ -1,6 +1,6 @@
 # GavelOS guarded Linux workload (experimental, IPv4-only)
 
-This feature provides a narrow, reproducible security property: **the agent cannot begin running before the Linux cgroup `connect4` hook is attached**, and children inherit the same cgroup-scoped network controls. Unlike the legacy monitored-PID mode, it does not rely on registering every child PID.
+This feature provides a narrow, reproducible security property: **the agent cannot begin running before the Linux cgroup `connect4` and `connect6` hooks are both pinned and attached**, and children inherit the same cgroup-scoped network controls. Unlike the legacy monitored-PID mode, it does not rely on registering every child PID.
 
 ## Example: disposable isolated Linux VM only
 
@@ -16,7 +16,7 @@ Configure a dedicated *unprivileged* local account; UID 0 and GID 0 are refused.
 ```sh
 sudo env \
   GAVEL_AGENT_UID=65534 GAVEL_AGENT_GID=65534 \
-  GAVEL_BLOCKED_IPS=127.0.0.2 \
+  GAVEL_BLOCKED_IPS=127.0.0.2 GAVEL_BLOCKED_IPV6=fd00:6761:7665:6c::2 \
   /tmp/gavel-enforcer run /usr/bin/python3 /path/to/agent.py
 ```
 
@@ -28,7 +28,7 @@ The parent process:
 
 1. Validates kernel capabilities, cgroup v2 and an enforceable policy.
 2. Creates a **new isolated child cgroup** containing no processes; requires a mounted bpffs at `/sys/fs/bpf` and a protected root-owned `/sys/fs/bpf/gavel-agents` directory (mode `0700`).
-3. Loads and attaches the `connect4` program with `ProtectAll` enabled, **pins its modern BPF link in bpffs**, and refuses to launch the agent if pinning fails or only legacy non-pinnable attachment is supported.
+3. Loads and attaches both `connect4` and `connect6` programs with `ProtectAll` enabled, **pins both modern BPF links in bpffs**, and refuses to launch the agent if either attachment or pin fails. Failed second-link installation rolls back the first link.
 4. Starts the unprivileged agent via Linux `CLONE_INTO_CGROUP` (Go `UseCgroupFD`), with **no fallback to fork-then-move** if the kernel rejects atomic assignment.
 5. On normal termination, uses `cgroup.kill` to terminate descendants, waits until the group is unpopulated, then unpins BPF and removes the group. On supervisor `SIGKILL`, the pinned kernel restriction remains even if an orphaned grandchild is alive.
 
@@ -49,7 +49,7 @@ The PR's privileged GitHub Actions proof job runs this exact test. It must **PAS
 
 ## Crash-resistant enforcement and trusted recovery
 
-On supported kernels, the guarded launcher requires a **pinned** cgroup BPF link before agent execution, rather than relying on a process-owned file descriptor. An unexpected supervisor `SIGKILL` does not automatically detach the pinned kernel hook. An orphaned, unprivileged agent descendant remains constrained by the IPv4 `connect4` policy until a trusted recovery process stops the entire cgroup.
+On supported kernels, the guarded launcher requires a **pinned** cgroup BPF link before agent execution, rather than relying on a process-owned file descriptor. An unexpected supervisor `SIGKILL` does not automatically detach the pinned kernel hooks. An orphaned, unprivileged agent descendant remains constrained by the IPv4 `connect4` and IPv6 `connect6` policies until a trusted recovery process stops the entire cgroup.
 
 **Requirement:** `/sys/fs/bpf` must already be mounted as bpffs before starting the launcher. A disposable Linux test VM can use `sudo mount -t bpf bpf /sys/fs/bpf` if necessary. Do not auto-mount bpffs on production hosts via an AI agent.
 
@@ -76,7 +76,7 @@ The test launches an unprivileged agent with a fork/exec grandchild, proves pre-
 
 ## Threat model and known exclusions
 
-- **Network scope only:** `cgroup/connect4` IPv4 TCP connect; no protection yet for IPv6, UDP, inherited connected sockets, AF_UNIX, filesystem, exec policies, kernel operations or semantic misuse of an approved endpoint.
+- **Network scope only:** `cgroup/connect4` and `cgroup/connect6` IPv4/IPv6 TCP connect. UDP `sendmsg`, inherited connected sockets, AF_UNIX, filesystem, exec restrictions, kernel-management operations and semantic misuse of approved endpoints are not yet protected. IPv4-mapped IPv6 addresses need further bypass testing.
 - **Protection survives supervisor SIGKILL only with a supported pinned link:** It is still not safe against arbitrary privileged root who can remove pins, change cgroup membership or manipulate BPF. A complete independent always-on recovery/watchdog service, crash-loop handling and anti-escape cgroup ownership policy remain future work.
 - **Agent is assumed nonroot:** Launched agents are forced to specified nonzero UID/GID and must not have the privileges required to modify protected cgroups or eBPF links.
 - **No complete sandbox:** These controls do not supply filesystem isolation, separate network namespaces, seccomp enforcement or a general agent privilege boundary.
@@ -88,5 +88,11 @@ The test launches an unprivileged agent with a fork/exec grandchild, proves pre-
 
 1. Independently supervise recovery on host crash/restart; verify the BPF pin and protected cgroup are discoverable after supervisor termination and failures cannot orphan workloads forever.
 2. Add cgroup-owned and verifiable workload admission, preventing agents from escaping the cgroup via writable cgroup controllers.
-3. Cover IPv6 and UDP and test namespace/cgroup escape attempts.
+3. Add UDP `sendmsg4`/`sendmsg6`, test IPv4-mapped IPv6 and namespace/cgroup escape attempts.
 4. Verify proper credential/capability dropping and protected policy identities.
+
+## IPv6 kernel proof (24 November 2026)
+
+The new guarded network program uses `cgroup/connect6` with an exact 128-bit destination key. Local policy is configured with `GAVEL_BLOCKED_IPV6`; connected control-plane policy uses `GAVEL_RUNTIME_BLOCKED_IPV6` and the `blocked_ipv6` response field. The IPv6 field accepts native IPv6 literals but rejects IPv4 and IPv4-mapped IPv6, which must be evaluated separately.
+
+In [GitHub Actions run 45347852581](https://github.com/rastogivaibhav/gavel-os/actions/runs/45347852581), a privileged ephemeral Linux runner configured a private loopback IPv6 address, then proved a nonroot agent and fork/exec descendant both received a kernel denial (`EPERM/EACCES`) for blocked `fd00:6761:7665:6c::2` while permitted `::1` succeeded. The same run proved both IPv4 and IPv6 hooks remained pinned and active after the supervisor's forced `SIGKILL`, with verified independent recovery. This does **not** include IPv6 UDP/sendmsg, inherited sockets, privileged attacker resistance, or a production security audit.
