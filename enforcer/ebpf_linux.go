@@ -14,8 +14,10 @@ import (
 type linuxEnforcerObjects struct {
 	MonitoredPIDs        *ebpf.Map
 	BlockedIPv4          *ebpf.Map
+	BlockedIPv6          *ebpf.Map
 	ProxyConfig          *ebpf.Map
 	GavelRedirectHandler *ebpf.Program
+	GavelIPv6Handler     *ebpf.Program
 }
 
 func ebpfProgramStatus() string {
@@ -49,7 +51,19 @@ func attachEnforcer(cgroupPath string, config LinuxEnforcerConfig) (func(), erro
 		return func() {}, err
 	}
 
+	attachedIPv6, err := link.AttachCgroup(link.CgroupOptions{
+		Path:    cgroupPath,
+		Attach:  ebpf.AttachCGroupInet6Connect,
+		Program: objects.GavelIPv6Handler,
+	})
+	if err != nil {
+		_ = attachedLink.Close()
+		_ = objects.Close()
+		return nil, fmt.Errorf("attach IPv6 connect6 or rollback IPv4: %w", err)
+	}
+
 	return func() {
+		_ = attachedIPv6.Close()
 		_ = attachedLink.Close()
 		_ = objects.Close()
 	}, nil
@@ -70,6 +84,12 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 				ValueSize:  1,
 				MaxEntries: 1024,
 			},
+			"blocked_ipv6": {
+				Type:       ebpf.Hash,
+				KeySize:    16,
+				ValueSize:  1,
+				MaxEntries: 1024,
+			},
 			"proxy_config": {
 				Type:       ebpf.Array,
 				KeySize:    4,
@@ -85,6 +105,13 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 				License:      "GPL",
 				Instructions: buildConnect4Instructions(protectAll),
 			},
+			"gavel_ipv6_handler": {
+				Name:         "gavel_ipv6_handler",
+				Type:         ebpf.CGroupSockAddr,
+				AttachType:   ebpf.AttachCGroupInet6Connect,
+				License:      "GPL",
+				Instructions: buildConnect6Instructions(protectAll),
+			},
 		},
 	}
 
@@ -96,22 +123,30 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 	objects := &linuxEnforcerObjects{
 		MonitoredPIDs:        collection.Maps["monitored_pids"],
 		BlockedIPv4:          collection.Maps["blocked_ipv4"],
+		BlockedIPv6:          collection.Maps["blocked_ipv6"],
 		ProxyConfig:          collection.Maps["proxy_config"],
 		GavelRedirectHandler: collection.Programs["gavel_redirect_handler"],
+		GavelIPv6Handler:     collection.Programs["gavel_ipv6_handler"],
 	}
-	if objects.GavelRedirectHandler == nil {
+	if objects.GavelRedirectHandler == nil || objects.GavelIPv6Handler == nil {
 		collection.Close()
-		return nil, fmt.Errorf("missing gavel_redirect_handler program")
+		return nil, fmt.Errorf("missing one or more GavelOS connect4/connect6 programs")
 	}
 	return objects, nil
 }
 
 func (objects *linuxEnforcerObjects) Close() error {
+	if objects.GavelIPv6Handler != nil {
+		_ = objects.GavelIPv6Handler.Close()
+	}
 	if objects.GavelRedirectHandler != nil {
 		_ = objects.GavelRedirectHandler.Close()
 	}
 	if objects.ProxyConfig != nil {
 		_ = objects.ProxyConfig.Close()
+	}
+	if objects.BlockedIPv6 != nil {
+		_ = objects.BlockedIPv6.Close()
 	}
 	if objects.BlockedIPv4 != nil {
 		_ = objects.BlockedIPv4.Close()
@@ -132,7 +167,13 @@ func configureLinuxEnforcer(objects *linuxEnforcerObjects, config LinuxEnforcerC
 	for _, ip := range config.BlockedIPv4 {
 		value := uint8(1)
 		if err := objects.BlockedIPv4.Put(ip, value); err != nil {
-			return fmt.Errorf("configure blocked ip %d: %w", ip, err)
+			return fmt.Errorf("configure blocked IPv4 %d: %w", ip, err)
+		}
+	}
+	for _, ip := range config.BlockedIPv6 {
+		value := uint8(1)
+		if err := objects.BlockedIPv6.Put(ip, value); err != nil {
+			return fmt.Errorf("configure blocked IPv6 %x: %w", ip, err)
 		}
 	}
 	if config.Proxy.Enabled == 1 {
@@ -196,6 +237,54 @@ func buildConnect4Instructions(protectAll bool) asm.Instructions {
 		asm.StoreMem(asm.R6, ctxUserPort, asm.R1, asm.Word),
 
 		asm.Mov.Imm(asm.R0, 1).WithSymbol("allow"),
+		asm.Return(),
+	)
+}
+
+
+// buildConnect6Instructions enforces an exact 128-bit destination match
+// against bpf_sock_addr.user_ip6[4], whose four network-order words are
+// at context offsets 8, 12, 16, 20. Unlike IPv4, no proxy rewrite applies.
+func buildConnect6Instructions(protectAll bool) asm.Instructions {
+	const (
+		pidKeyOffset = -8
+		ipKeyOffset  = -48
+		userIP6      = 8
+	)
+	ins := asm.Instructions{asm.Mov.Reg(asm.R6, asm.R1)}
+	if !protectAll {
+		ins = append(ins,
+			asm.FnGetCurrentPidTgid.Call(),
+			asm.RSh.Imm(asm.R0, 32),
+			asm.StoreMem(asm.RFP, pidKeyOffset, asm.R0, asm.Word),
+			asm.Mov.Reg(asm.R2, asm.RFP),
+			asm.Add.Imm(asm.R2, pidKeyOffset),
+			asm.LoadMapPtr(asm.R1, 0).WithReference("monitored_pids"),
+			asm.FnMapLookupElem.Call(),
+			asm.JEq.Imm(asm.R0, 0, "allow_ipv6"),
+			asm.LoadMem(asm.R1, asm.R0, 0, asm.Byte),
+			asm.JEq.Imm(asm.R1, 0, "allow_ipv6"),
+		)
+	}
+	// Construct the map key out of four 32-bit context words without
+	// endianness conversion. The userspace key is stored as [16]byte.
+	for i := int16(0); i < 16; i += 4 {
+		ins = append(ins,
+			asm.LoadMem(asm.R1, asm.R6, userIP6+i, asm.Word),
+			asm.StoreMem(asm.RFP, ipKeyOffset+i, asm.R1, asm.Word),
+		)
+	}
+	return append(ins,
+		asm.Mov.Reg(asm.R2, asm.RFP),
+		asm.Add.Imm(asm.R2, ipKeyOffset),
+		asm.LoadMapPtr(asm.R1, 0).WithReference("blocked_ipv6"),
+		asm.FnMapLookupElem.Call(),
+		asm.JEq.Imm(asm.R0, 0, "allow_ipv6"),
+		asm.LoadMem(asm.R1, asm.R0, 0, asm.Byte),
+		asm.JEq.Imm(asm.R1, 0, "allow_ipv6"),
+		asm.Mov.Imm(asm.R0, 0),
+		asm.Return(),
+		asm.Mov.Imm(asm.R0, 1).WithSymbol("allow_ipv6"),
 		asm.Return(),
 	)
 }
