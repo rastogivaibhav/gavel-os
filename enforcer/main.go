@@ -44,6 +44,7 @@ type LinuxPreflightResult struct {
 	ControlPlaneStatus string `json:"control_plane_status,omitempty"`
 	MonitoredPIDCount  int    `json:"monitored_pid_count"`
 	BlockedIPv4Count   int    `json:"blocked_ipv4_count"`
+	BlockedIPv6Count   int    `json:"blocked_ipv6_count"`
 	ProxyRedirect      bool   `json:"proxy_redirect"`
 }
 
@@ -167,6 +168,7 @@ func prepareLinuxEnforcement(
 	preflight.EnforcementAttached = true
 	preflight.MonitoredPIDCount = len(config.MonitoredPIDs)
 	preflight.BlockedIPv4Count = len(config.BlockedIPv4)
+	preflight.BlockedIPv6Count = len(config.BlockedIPv6)
 	preflight.ProxyRedirect = config.Proxy.Enabled == 1
 	return preflight, cleanup, nil
 }
@@ -234,6 +236,7 @@ func runLinuxPreflight() LinuxPreflightResult {
 	if policyErr == nil {
 		result.MonitoredPIDCount = len(config.MonitoredPIDs)
 		result.BlockedIPv4Count = len(config.BlockedIPv4)
+		result.BlockedIPv6Count = len(config.BlockedIPv6)
 		result.ProxyRedirect = config.Proxy.Enabled == 1
 	}
 
@@ -431,6 +434,7 @@ func reportLinuxComponentHealth(preflight LinuxPreflightResult) {
 			"control_plane_status": preflight.ControlPlaneStatus,
 			"monitored_pid_count":  preflight.MonitoredPIDCount,
 			"blocked_ipv4_count":   preflight.BlockedIPv4Count,
+			"blocked_ipv6_count":   preflight.BlockedIPv6Count,
 			"proxy_redirect":       preflight.ProxyRedirect,
 		},
 	}
