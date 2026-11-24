@@ -172,6 +172,7 @@ class MachinePolicyResponse(MachineRuntimeState):
     reason_code: str = Field(min_length=1)
     monitored_pids: list[int] = Field(default_factory=list)
     blocked_ipv4: list[str] = Field(default_factory=list)
+    blocked_ipv6: list[str] = Field(default_factory=list)
     blocked_targets: list[str] = Field(default_factory=list)
     monitored_processes: list[str] = Field(default_factory=list)
     proxy_ipv4: str | None = None
