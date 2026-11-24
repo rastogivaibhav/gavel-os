@@ -179,14 +179,18 @@ def _normalize_ipv4_values(values: list[str]) -> list[str]:
 
 
 def _normalize_ipv6_values(values: list[str]) -> list[str]:
+    # A configured security rule must never disappear silently during
+    # normalization. A policy error aborts the response, causing Linux
+    # enforcement-required startup to refuse unprotected agent launch.
     normalized: list[str] = []
     for value in values:
         try:
             address = IPv6Address(value)
-            if address.ipv4_mapped is None:
-                normalized.append(str(address))
-        except ValueError:
-            continue
+        except ValueError as exc:
+            raise ValueError(f"invalid blocked IPv6 destination: {value!r}") from exc
+        if address.ipv4_mapped is not None:
+            raise ValueError(f"IPv4-mapped address belongs in IPv4 policy: {value!r}")
+        normalized.append(str(address))
     return normalized
 
 
