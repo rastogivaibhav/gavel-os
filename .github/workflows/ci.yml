@@ -197,14 +197,12 @@ jobs:
       - name: Assert real isolated cgroup/eBPF denial
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 45s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelConnect4Denial$' -test.v -test.timeout=40s
+            -test.run TestKernelConnect4Denial -test.v -test.timeout=40s
       - name: Assert agent and descendant inherit kernel cgroup denial
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedAgentAndDescendants
- -test.v -test.timeout=55s
+            -test.run TestKernelGuardedAgentAndDescendants -test.v -test.timeout=55s
       - name: Assert pinned kernel protection survives supervisor SIGKILL
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 85s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelSupervisorSIGKILLRetainsBPF
- -test.v -test.timeout=80s
+            -test.run TestKernelSupervisorSIGKILLRetainsBPF -test.v -test.timeout=80s
