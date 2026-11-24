@@ -5,13 +5,18 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/cilium/ebpf/rlimit"
 )
 
 // A disposable privileged Linux runner is required. This adds a private
@@ -162,4 +167,98 @@ func TestGuardedIPv6EnvironmentDoesNotLeak(t *testing.T) {
 			t.Fatalf("supervisor IPv6 policy leaked: %s", v)
 		}
 	}
+}
+
+
+// Separate from the guarded launcher: the regular daemon's legacy PID
+// enrollment must also enforce exact IPv6 addresses at connect6.
+func TestKernelConnect6Probe(t *testing.T) {
+	if os.Getenv("GAVEL_IPV6_PID_HELPER") != "1" {
+		t.Skip("direct legacy monitored-PID kernel probe")
+	}
+	var gate [1]byte
+	if _, err := io.ReadFull(os.Stdin, gate[:]); err != nil {
+		t.Fatalf("waiting for test cgroup enrollment: %v", err)
+	}
+	allowed, err := net.DialTimeout("tcp6", os.Getenv("GAVEL_IPV6_PID_ALLOWED"), 2*time.Second)
+	if err != nil {
+		t.Fatalf("permitted IPv6 connect failed: %v", err)
+	}
+	_ = allowed.Close()
+	blocked, err := net.DialTimeout("tcp6", os.Getenv("GAVEL_IPV6_PID_BLOCKED"), 2*time.Second)
+	if blocked != nil {
+		_ = blocked.Close()
+		t.Fatal("SECURITY VIOLATION: monitored PID connected to forbidden IPv6")
+	}
+	if !errors.Is(err, syscall.EPERM) && !errors.Is(err, syscall.EACCES) {
+		t.Fatalf("expected kernel EPERM/EACCES for IPv6, got %v", err)
+	}
+}
+
+func TestKernelConnect6DenialForMonitoredPID(t *testing.T) {
+	if os.Getenv("GAVEL_RUN_KERNEL_TESTS") != "1" {
+		t.Skip("requires opt-in privileged isolated Linux test")
+	}
+	if os.Geteuid() != 0 {
+		t.Fatal("requires privileged Linux test VM")
+	}
+	allowed, denied := ipv6ProofListeners(t)
+	cg, err := os.MkdirTemp("/sys/fs/cgroup", "gavel-test-ipv6-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Remove(cg); err != nil {
+			t.Errorf("remove isolated IPv6 PID test cgroup: %v", err)
+		}
+	})
+	if _, err := os.Stat(filepath.Join(cg, "cgroup.procs")); err != nil {
+		t.Fatal(err)
+	}
+	if err := rlimit.RemoveMemlock(); err != nil {
+		t.Fatal(err)
+	}
+	child := exec.Command(os.Args[0], "-test.run=^TestKernelConnect6Probe$", "-test.v")
+	child.Env = append(os.Environ(),
+		"GAVEL_IPV6_PID_HELPER=1",
+		"GAVEL_IPV6_PID_ALLOWED="+allowed.Addr().String(),
+		"GAVEL_IPV6_PID_BLOCKED="+denied.Addr().String(),
+	)
+	stdin, err := child.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	child.Stdout, child.Stderr = os.Stdout, os.Stderr
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if child.ProcessState == nil {
+			_ = child.Process.Kill()
+			_ = child.Wait()
+		}
+	}()
+	pid := child.Process.Pid
+	if err := os.WriteFile(filepath.Join(cg, "cgroup.procs"), []byte(strconv.Itoa(pid)), 0600); err != nil {
+		t.Fatalf("cannot enroll IPv6 test PID: %v", err)
+	}
+	blocked6, err := parseIPv6("fd00:6761:7665:6c::2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	detach, err := attachEnforcer(cg, LinuxEnforcerConfig{
+		MonitoredPIDs: []uint32{uint32(pid)}, BlockedIPv6: [][16]byte{blocked6},
+	})
+	if err != nil {
+		t.Fatalf("kernel connect6 program could not attach: %v", err)
+	}
+	defer detach()
+	if _, err := stdin.Write([]byte{1}); err != nil {
+		t.Fatal(err)
+	}
+	_ = stdin.Close()
+	if err := child.Wait(); err != nil {
+		t.Fatalf("monitored-PID IPv6 kernel probe failed: %v", err)
+	}
+	t.Log("KERNEL PROOF: legacy PID-scoped connect6 denies IPv6 while permitting IPv6 control")
 }
