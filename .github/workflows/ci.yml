@@ -171,7 +171,7 @@ jobs:
   # Never run arbitrary fork-contributed code with elevated kernel privileges.
   kernel-denial-proof:
     name: Kernel IPv4 Denial (ephemeral VM)
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/linux-guarded-cgroup-workload-20261123' }}
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/linux-ipv6-connect6-20261124' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
