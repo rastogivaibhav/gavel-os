@@ -57,7 +57,8 @@ func guardedIPv6PinPath(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return base + ".v6", nil
+	// bpffs rejects filenames containing a dot on several kernels.
+	return base + "_v6", nil
 }
 
 // attachPinnedGuardedEnforcer installs both connect4 and connect6 under a
@@ -131,7 +132,7 @@ func attachPinnedGuardedEnforcer(cgroup string, config LinuxEnforcerConfig) (str
 }
 
 // Called only after the entire protected cgroup has been stopped and proven
-// unpopulated. Older IPv4-only workloads may lack the .v6 link.
+// unpopulated. Older IPv4-only workloads may lack the _v6 link.
 func unpinGuardedEnforcer(name string) error {
 	pin4, err := guardedPinPath(name)
 	if err != nil {
