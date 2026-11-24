@@ -131,6 +131,7 @@ func TestKernelGuardedIPv6AndDescendants(t *testing.T) {
 		t.Skip("requires isolated privileged Linux VM")
 	}
 	allowed6, denied6 := ipv6ProofListeners(t)
+	udp := setupUDPProof(t)
 	t.Setenv("GAVEL_MACHINE_KEY", "")
 	t.Setenv("GAVEL_MONITORED_PIDS", "")
 	t.Setenv("GAVEL_BLOCKED_IPS", "127.0.0.2")
@@ -154,6 +155,7 @@ func TestKernelGuardedIPv6AndDescendants(t *testing.T) {
 	if err := runGuardedAgent([]string{exe, "-test.run=^TestKernelGuardedAgentProbe$", "-test.v"}); err != nil {
 		t.Fatalf("IPv6 protected parent or fork/exec child escaped: %v", err)
 	}
+	assertUDPReceivers(t, udp, 2)
 	t.Log(fmt.Sprintf("KERNEL PROOF: agent and fork/exec child both denied IPv6 %s and permitted %s", denied6.Addr(), allowed6.Addr()))
 }
 
@@ -193,6 +195,7 @@ func TestKernelConnect6Probe(t *testing.T) {
 	if !errors.Is(err, syscall.EPERM) && !errors.Is(err, syscall.EACCES) {
 		t.Fatalf("expected kernel EPERM/EACCES for IPv6, got %v", err)
 	}
+	checkUDPProof(t)
 }
 
 func TestKernelConnect6DenialForMonitoredPID(t *testing.T) {
@@ -203,6 +206,7 @@ func TestKernelConnect6DenialForMonitoredPID(t *testing.T) {
 		t.Fatal("requires privileged Linux test VM")
 	}
 	allowed, denied := ipv6ProofListeners(t)
+	udp := setupUDPProof(t)
 	cg, err := os.MkdirTemp("/sys/fs/cgroup", "gavel-test-ipv6-")
 	if err != nil {
 		t.Fatal(err)
@@ -246,8 +250,11 @@ func TestKernelConnect6DenialForMonitoredPID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	blocked4, err := parseIPv4("127.0.0.2")
+	if err != nil { t.Fatal(err) }
 	detach, err := attachEnforcer(cg, LinuxEnforcerConfig{
 		MonitoredPIDs: []uint32{uint32(pid)}, BlockedIPv6: [][16]byte{blocked6},
+		BlockedIPv4: []uint32{blocked4},
 	})
 	if err != nil {
 		t.Fatalf("kernel connect6 program could not attach: %v", err)
@@ -260,5 +267,6 @@ func TestKernelConnect6DenialForMonitoredPID(t *testing.T) {
 	if err := child.Wait(); err != nil {
 		t.Fatalf("monitored-PID IPv6 kernel probe failed: %v", err)
 	}
+	assertUDPReceivers(t, udp, 1)
 	t.Log("KERNEL PROOF: legacy PID-scoped connect6 denies IPv6 while permitting IPv6 control")
 }

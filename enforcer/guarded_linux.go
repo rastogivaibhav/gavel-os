@@ -16,10 +16,10 @@ import (
 )
 
 // runGuardedAgent launches ONLY new, unprivileged workloads in a dedicated
-// cgroup after the BPF connect4 hook attaches. Existing PID-based monitoring
+// cgroup after all required network BPF hooks are attached and pinned. Existing PID-based monitoring
 // and its policy model are unchanged by this opt-in path.
 //
-// Security scope: IPv4 connect4 only. Requires a modern pinnable BPF link;
+// Security scope: IP connect and unconnected UDP destination blocklists. Requires a modern pinnable BPF link;
 // the kernel hook survives a supervisor SIGKILL, but independent recovery is
 // required to kill any surviving descendants and remove the pin.
 func runGuardedAgent(argv []string) (resultErr error) {
@@ -87,6 +87,16 @@ func runGuardedAgent(argv []string) (resultErr error) {
 
 	pin, err := attachPinnedGuardedEnforcer(cg, config)
 	if err != nil {
+		// If rollback failed, retain the empty cgroup for operator recovery.
+		// No workload has been launched.
+		if base, pathErr := guardedPinPath(pinName); pathErr == nil {
+			for _, suffix := range guardedNetworkPinSuffixes {
+				if _, statErr := os.Lstat(base + suffix); !os.IsNotExist(statErr) {
+					terminated = false
+					break
+				}
+			}
+		}
 		return fmt.Errorf("SECURITY BLOCKER: cannot pin kernel policy before agent execution: %w", err)
 	}
 	pinned = true
@@ -115,7 +125,7 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	}
 	started = true
 	terminated = false
-	log.Printf("protected child pid=%d cgroup=%s (connect4 policy; descendants inherit scope)", cmd.Process.Pid, cg)
+	log.Printf("protected child pid=%d cgroup=%s (connect4/connect6/sendmsg4/sendmsg6 policy; descendants inherit scope)", cmd.Process.Pid, cg)
 
 	stops := make(chan os.Signal, 1)
 	signal.Notify(stops, syscall.SIGINT, syscall.SIGTERM)
