@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 from api.control_plane import build_runtime_policy
 from api.runtime_contract import RuntimeMode, RuntimeOS
