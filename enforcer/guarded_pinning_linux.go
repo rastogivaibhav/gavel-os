@@ -50,64 +50,111 @@ func guardedPinPath(name string) (string, error) {
 	return filepath.Join(guardedBPFFSRoot, name), nil
 }
 
-// attachPinnedGuardedEnforcer constructs a kernel-enforced policy scoped to
-// a dedicated child cgroup. The link must successfully pin BEFORE an agent
-// can start; on kernels using the legacy cgroup attach fallback Pin fails
-// with ErrNotSupported and the launch is refused.
+// guardedIPv6PinPath is intentionally a sibling, not a different cgroup.
+// Both links must remain pinned for the lifetime of the protected workload.
+func guardedIPv6PinPath(name string) (string, error) {
+	base, err := guardedPinPath(name)
+	if err != nil {
+		return "", err
+	}
+	return base + ".v6", nil
+}
+
+// attachPinnedGuardedEnforcer installs both connect4 and connect6 under a
+// dedicated child cgroup and pins BOTH links before any unprivileged task may
+// enter it. Modern pinnable BPF links are mandatory; no legacy fallback.
 func attachPinnedGuardedEnforcer(cgroup string, config LinuxEnforcerConfig) (string, error) {
 	if !config.ProtectAll || !linuxPolicyConfigured(config) {
 		return "", fmt.Errorf("SECURITY BLOCKER: pinned attachment requires a nonempty protect-all policy")
 	}
 	name := filepath.Base(filepath.Clean(cgroup))
-	pin, err := guardedPinPath(name)
+	pin4, err := guardedPinPath(name)
+	if err != nil {
+		return "", err
+	}
+	pin6, err := guardedIPv6PinPath(name)
 	if err != nil {
 		return "", err
 	}
 	if err := prepareGuardedPinRoot(); err != nil {
 		return "", err
 	}
-	if _, err := os.Lstat(pin); err == nil {
-		return "", fmt.Errorf("SECURITY BLOCKER: pin already exists for %s; refusing overwrite", name)
-	} else if !os.IsNotExist(err) {
-		return "", err
+	for _, pin := range []string{pin4, pin6} {
+		if _, err := os.Lstat(pin); err == nil {
+			return "", fmt.Errorf("SECURITY BLOCKER: pin already exists %s; refusing overwrite", pin)
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
 	}
 	objects, err := loadLinuxEnforcerObjects(true)
 	if err != nil {
-		return "", fmt.Errorf("load protected kernel program: %w", err)
+		return "", fmt.Errorf("load protected dual-family kernel program: %w", err)
 	}
 	defer objects.Close()
 	if err := configureLinuxEnforcer(objects, config); err != nil {
 		return "", err
 	}
-	attached, err := link.AttachCgroup(link.CgroupOptions{
+
+	link4, err := link.AttachCgroup(link.CgroupOptions{
 		Path: cgroup, Attach: ebpf.AttachCGroupInet4Connect,
 		Program: objects.GavelRedirectHandler,
 	})
 	if err != nil {
-		return "", fmt.Errorf("attach protected kernel program: %w", err)
+		return "", fmt.Errorf("attach guarded connect4: %w", err)
 	}
-	defer attached.Close()
-	if err := attached.Pin(pin); err != nil {
-		return "", fmt.Errorf("SECURITY BLOCKER: modern pinnable cgroup BPF link required: %w", err)
+	defer link4.Close()
+	if err := link4.Pin(pin4); err != nil {
+		return "", fmt.Errorf("SECURITY BLOCKER: pinnable connect4 BPF link required: %w", err)
 	}
-	// Closing the local link fd after Pin does not detach the kernel hook.
-	// The pin and kernel references retain the BPF maps and program even
-	// when this process dies without running Go defers (e.g. SIGKILL).
-	return pin, nil
+
+	link6, err := link.AttachCgroup(link.CgroupOptions{
+		Path: cgroup, Attach: ebpf.AttachCGroupInet6Connect,
+		Program: objects.GavelIPv6Handler,
+	})
+	if err != nil {
+		if unpinErr := link4.Unpin(); unpinErr != nil {
+			return "", fmt.Errorf("SECURITY BLOCKER: IPv6 attach failed (%v), rollback IPv4 pin failed (%w)", err, unpinErr)
+		}
+		return "", fmt.Errorf("SECURITY BLOCKER: IPv6 attach failed, IPv4 pin rolled back: %w", err)
+	}
+	defer link6.Close()
+	if err := link6.Pin(pin6); err != nil {
+		if unpinErr := link4.Unpin(); unpinErr != nil {
+			return "", fmt.Errorf("SECURITY BLOCKER: IPv6 pin failed (%v), rollback IPv4 pin failed (%w)", err, unpinErr)
+		}
+		return "", fmt.Errorf("SECURITY BLOCKER: pinnable connect6 BPF link required: %w", err)
+	}
+	// Both pinned hooks outlive this process, including SIGKILL. Their map
+	// dependencies are retained by the kernel. Never launch an agent if
+	// either link could not be made persistent.
+	return pin4, nil
 }
 
+// Called only after the entire protected cgroup has been stopped and proven
+// unpopulated. Older IPv4-only workloads may lack the .v6 link.
 func unpinGuardedEnforcer(name string) error {
-	pin, err := guardedPinPath(name)
+	pin4, err := guardedPinPath(name)
 	if err != nil {
 		return err
 	}
-	attached, err := link.LoadPinnedLink(pin, nil)
+	pin6, err := guardedIPv6PinPath(name)
 	if err != nil {
-		return fmt.Errorf("load persisted BPF link %s: %w", pin, err)
+		return err
 	}
-	defer attached.Close()
-	if err := attached.Unpin(); err != nil {
-		return fmt.Errorf("unpin protected BPF link %s: %w", pin, err)
+	// Remove the IPv6 link first; leave IPv4 attached if this fails.
+	for _, pin := range []string{pin6, pin4} {
+		attached, err := link.LoadPinnedLink(pin, nil)
+		if os.IsNotExist(err) && pin == pin6 {
+			continue // legacy IPv4-only guarded cgroup
+		}
+		if err != nil {
+			return fmt.Errorf("load persisted kernel link %s: %w", pin, err)
+		}
+		unpinErr := attached.Unpin()
+		_ = attached.Close()
+		if unpinErr != nil {
+			return fmt.Errorf("unpin protected kernel link %s: %w", pin, unpinErr)
+		}
 	}
 	return nil
 }
