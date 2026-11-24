@@ -18,6 +18,8 @@ type linuxEnforcerObjects struct {
 	ProxyConfig          *ebpf.Map
 	GavelRedirectHandler *ebpf.Program
 	GavelIPv6Handler     *ebpf.Program
+	GavelUDP4Handler     *ebpf.Program
+	GavelUDP6Handler     *ebpf.Program
 }
 
 func ebpfProgramStatus() string {
@@ -41,32 +43,43 @@ func attachEnforcer(cgroupPath string, config LinuxEnforcerConfig) (func(), erro
 		return func() {}, err
 	}
 
-	attachedLink, err := link.AttachCgroup(link.CgroupOptions{
-		Path:    cgroupPath,
-		Attach:  ebpf.AttachCGroupInet4Connect,
-		Program: objects.GavelRedirectHandler,
-	})
-	if err != nil {
-		_ = objects.Close()
-		return func() {}, err
+	var attached []link.Link
+	for _, hook := range objects.networkHooks() {
+		l, err := link.AttachCgroup(link.CgroupOptions{
+			Path: cgroupPath, Attach: hook.attach, Program: hook.program,
+		})
+		if err != nil {
+			for _, previous := range attached {
+				_ = previous.Close()
+			}
+			_ = objects.Close()
+			return nil, fmt.Errorf("attach required %s: %w", hook.name, err)
+		}
+		attached = append(attached, l)
 	}
-
-	attachedIPv6, err := link.AttachCgroup(link.CgroupOptions{
-		Path:    cgroupPath,
-		Attach:  ebpf.AttachCGroupInet6Connect,
-		Program: objects.GavelIPv6Handler,
-	})
-	if err != nil {
-		_ = attachedLink.Close()
-		_ = objects.Close()
-		return nil, fmt.Errorf("attach IPv6 connect6 or rollback IPv4: %w", err)
-	}
-
 	return func() {
-		_ = attachedIPv6.Close()
-		_ = attachedLink.Close()
+		for _, l := range attached {
+			_ = l.Close()
+		}
 		_ = objects.Close()
 	}, nil
+
+}
+
+type networkHook struct {
+	name string
+	attach ebpf.AttachType
+	program *ebpf.Program
+	pinSuffix string
+}
+
+func (objects *linuxEnforcerObjects) networkHooks() []networkHook {
+	return []networkHook{
+		{"connect4", ebpf.AttachCGroupInet4Connect, objects.GavelRedirectHandler, ""},
+		{"connect6", ebpf.AttachCGroupInet6Connect, objects.GavelIPv6Handler, "_v6"},
+		{"sendmsg4", ebpf.AttachCGroupUDP4Sendmsg, objects.GavelUDP4Handler, "_udp4"},
+		{"sendmsg6", ebpf.AttachCGroupUDP6Sendmsg, objects.GavelUDP6Handler, "_udp6"},
+	}
 }
 
 func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
@@ -105,6 +118,20 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 				License:      "GPL",
 				Instructions: buildConnect4Instructions(protectAll),
 			},
+			"gavel_udp4_handler": {
+				Name: "gavel_udp4_handler",
+				Type: ebpf.CGroupSockAddr,
+				AttachType: ebpf.AttachCGroupUDP4Sendmsg,
+				License: "GPL",
+				Instructions: buildSendmsg4Instructions(protectAll),
+			},
+			"gavel_udp6_handler": {
+				Name: "gavel_udp6_handler",
+				Type: ebpf.CGroupSockAddr,
+				AttachType: ebpf.AttachCGroupUDP6Sendmsg,
+				License: "GPL",
+				Instructions: buildConnect6Instructions(protectAll),
+			},
 			"gavel_ipv6_handler": {
 				Name:         "gavel_ipv6_handler",
 				Type:         ebpf.CGroupSockAddr,
@@ -127,15 +154,25 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 		ProxyConfig:          collection.Maps["proxy_config"],
 		GavelRedirectHandler: collection.Programs["gavel_redirect_handler"],
 		GavelIPv6Handler:     collection.Programs["gavel_ipv6_handler"],
+		GavelUDP4Handler:     collection.Programs["gavel_udp4_handler"],
+		GavelUDP6Handler:     collection.Programs["gavel_udp6_handler"],
 	}
-	if objects.GavelRedirectHandler == nil || objects.GavelIPv6Handler == nil {
-		collection.Close()
-		return nil, fmt.Errorf("missing one or more GavelOS connect4/connect6 programs")
+	for _, hook := range objects.networkHooks() {
+		if hook.program == nil {
+			collection.Close()
+			return nil, fmt.Errorf("missing required GavelOS %s program", hook.name)
+		}
 	}
 	return objects, nil
 }
 
 func (objects *linuxEnforcerObjects) Close() error {
+	if objects.GavelUDP6Handler != nil {
+		_ = objects.GavelUDP6Handler.Close()
+	}
+	if objects.GavelUDP4Handler != nil {
+		_ = objects.GavelUDP4Handler.Close()
+	}
 	if objects.GavelIPv6Handler != nil {
 		_ = objects.GavelIPv6Handler.Close()
 	}
@@ -285,6 +322,47 @@ func buildConnect6Instructions(protectAll bool) asm.Instructions {
 		asm.Mov.Imm(asm.R0, 0),
 		asm.Return(),
 		asm.Mov.Imm(asm.R0, 1).WithSymbol("allow_ipv6"),
+		asm.Return(),
+	)
+}
+
+// UDP sendmsg4 shares the blocklist but never rewrites datagram destinations.
+func buildSendmsg4Instructions(protectAll bool) asm.Instructions {
+	const (
+		pidKeyOffset   = -8
+		ipKeyOffset    = -16
+		ctxUserIP4     = 4
+	)
+
+	instructions := asm.Instructions{asm.Mov.Reg(asm.R6, asm.R1)}
+	if !protectAll {
+		instructions = append(instructions,
+		asm.FnGetCurrentPidTgid.Call(),
+		asm.RSh.Imm(asm.R0, 32),
+		asm.StoreMem(asm.RFP, pidKeyOffset, asm.R0, asm.Word),
+		asm.Mov.Reg(asm.R2, asm.RFP),
+		asm.Add.Imm(asm.R2, pidKeyOffset),
+		asm.LoadMapPtr(asm.R1, 0).WithReference("monitored_pids"),
+		asm.FnMapLookupElem.Call(),
+		asm.JEq.Imm(asm.R0, 0, "allow"),
+		asm.LoadMem(asm.R1, asm.R0, 0, asm.Byte),
+		asm.JEq.Imm(asm.R1, 0, "allow"),
+		)
+	}
+	return append(instructions,
+		asm.LoadMem(asm.R1, asm.R6, ctxUserIP4, asm.Word),
+		asm.StoreMem(asm.RFP, ipKeyOffset, asm.R1, asm.Word),
+		asm.Mov.Reg(asm.R2, asm.RFP),
+		asm.Add.Imm(asm.R2, ipKeyOffset),
+		asm.LoadMapPtr(asm.R1, 0).WithReference("blocked_ipv4"),
+		asm.FnMapLookupElem.Call(),
+		asm.JEq.Imm(asm.R0, 0, "allow"),
+		asm.LoadMem(asm.R1, asm.R0, 0, asm.Byte),
+		asm.JEq.Imm(asm.R1, 0, "allow"),
+		asm.Mov.Imm(asm.R0, 0).WithSymbol("deny"),
+		asm.Return(),
+
+		asm.Mov.Imm(asm.R0, 1).WithSymbol("allow"),
 		asm.Return(),
 	)
 }
