@@ -94,6 +94,7 @@ func guardedDial(t *testing.T) {
 	if !errors.Is(err, syscall.EPERM) && !errors.Is(err, syscall.EACCES) {
 		t.Fatalf("denial did not return kernel EPERM/EACCES: %v", err)
 	}
+	checkGuardedIPv6(t)
 }
 
 func TestKernelGuardedChildProbe(t *testing.T) {
