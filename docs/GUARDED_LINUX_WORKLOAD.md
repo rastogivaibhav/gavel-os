@@ -82,7 +82,7 @@ The test launches an unprivileged agent with a fork/exec grandchild, proves pre-
 - **No complete sandbox:** These controls do not supply filesystem isolation, separate network namespaces, seccomp enforcement or a general agent privilege boundary.
 - **Recovery must be verified:** If `cgroup.kill` or empty-group verification fails, leave the pinned policy attached and report a security-critical error. Do not unpin while active tasks remain.
 
-**Engineering status:** experimental M1/M4 proof, pending the privileged SIGKILL-and-recovery acceptance test on the PR branch. Do not imply production readiness or tamper-proof enforcement.
+**Engineering status:** KERNEL_TESTED for the narrowly scoped unprivileged IPv4 supervisor-`SIGKILL` scenario in [CI run 45344226360](https://github.com/rastogivaibhav/gavel-os/actions/runs/45344226360). This does not imply production readiness, automatic recovery, or tamper-proof enforcement.
 
 ## Next hardening work
 
