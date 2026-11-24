@@ -19,9 +19,10 @@ import (
 // cgroup after the BPF connect4 hook attaches. Existing PID-based monitoring
 // and its policy model are unchanged by this opt-in path.
 //
-// Security scope: IPv4 connect4 only. The supervisor must remain trusted;
-// external SIGKILL or host-root tampering can still detach its BPF link.
-func runGuardedAgent(argv []string) error {
+// Security scope: IPv4 connect4 only. Requires a modern pinnable BPF link;
+// the kernel hook survives a supervisor SIGKILL, but independent recovery is
+// required to kill any surviving descendants and remove the pin.
+func runGuardedAgent(argv []string) (resultErr error) {
 	if len(argv) == 0 || argv[0] == "" {
 		return fmt.Errorf("usage: gavel-enforcer run <absolute-executable> [args...]")
 	}
@@ -58,32 +59,38 @@ func runGuardedAgent(argv []string) error {
 	if err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: cannot create dedicated child cgroup: %w", err)
 	}
-	// An empty cgroup can be removed after the link is detached. Until a
-	// workload has started, no process can escape its policy on this cgroup.
+	// The BPF link is pinned *before* the unprivileged child is launched.
+	// A Go defer cannot execute under SIGKILL; the persisted bpffs link
+	// continues to mediate this cgroup when this supervisor dies.
 	started := false
 	terminated := true
-	var detach func()
+	pinned := false
+	pinName := filepath.Base(cg)
 	defer func() {
 		if started && !terminated {
-			log.Printf("SECURITY CRITICAL: guarded workload may still exist in %s; BPF link will be lost when supervisor exits", cg)
+			log.Printf("SECURITY CRITICAL: workload may survive supervisor termination in %s; kernel BPF link remains pinned for independent recovery", cg)
+			return
 		}
-		if detach != nil && terminated {
-			detach()
+		if !terminated {
+			return
 		}
-		if terminated {
-			if err := os.Remove(cg); err != nil {
-				log.Printf("guarded cgroup cleanup: %v", err)
+		if pinned {
+			if err := unpinGuardedEnforcer(pinName); err != nil {
+				resultErr = fmt.Errorf("SECURITY BLOCKER: safe link cleanup failed (cgroup %s): %w", cg, err)
+				return // Never remove cgroup while we still own a pinned link.
 			}
+		}
+		if err := os.Remove(cg); err != nil {
+			resultErr = fmt.Errorf("SECURITY BLOCKER: remove protected cgroup %s: %w", cg, err)
 		}
 	}()
 
-	detach, err = attachEnforcer(cg, config)
+	pin, err := attachPinnedGuardedEnforcer(cg, config)
 	if err != nil {
-		return fmt.Errorf("SECURITY BLOCKER: cannot attach kernel policy before agent execution: %w", err)
+		return fmt.Errorf("SECURITY BLOCKER: cannot pin kernel policy before agent execution: %w", err)
 	}
-	if detach == nil {
-		return fmt.Errorf("SECURITY BLOCKER: kernel attachment provided no owned link")
-	}
+	pinned = true
+	log.Printf("persistent protected kernel link pinned at %s", pin)
 
 	cgfd, err := os.Open(cg)
 	if err != nil {
