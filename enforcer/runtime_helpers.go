@@ -34,6 +34,7 @@ type LinuxProxyConfig struct {
 type LinuxEnforcerConfig struct {
 	MonitoredPIDs []uint32
 	BlockedIPv4   []uint32
+	BlockedIPv6   [][16]byte
 	Proxy         LinuxProxyConfig
 	// ProtectAll enforces the policy for ALL tasks in the attached cgroup,
 	// including fork/exec descendants. Only enable on a dedicated child cgroup.
@@ -132,9 +133,16 @@ func loadLinuxEnforcerConfigFromEnv() (LinuxEnforcerConfig, error) {
 	if raw := os.Getenv("GAVEL_BLOCKED_IPS"); raw != "" {
 		ips, err := parseIPv4CSV(raw)
 		if err != nil {
-			return LinuxEnforcerConfig{}, fmt.Errorf("parse blocked ips: %w", err)
+			return LinuxEnforcerConfig{}, fmt.Errorf("parse blocked IPv4: %w", err)
 		}
 		config.BlockedIPv4 = ips
+	}
+	if raw := os.Getenv("GAVEL_BLOCKED_IPV6"); raw != "" {
+		ips, err := parseIPv6CSV(raw)
+		if err != nil {
+			return LinuxEnforcerConfig{}, fmt.Errorf("parse blocked IPv6: %w", err)
+		}
+		config.BlockedIPv6 = ips
 	}
 
 	proxyIP := strings.TrimSpace(os.Getenv("GAVEL_PROXY_IPV4"))
@@ -159,7 +167,7 @@ func loadLinuxEnforcerConfigFromEnv() (LinuxEnforcerConfig, error) {
 }
 
 func linuxPolicyConfigured(config LinuxEnforcerConfig) bool {
-	return (config.ProtectAll || len(config.MonitoredPIDs) > 0) && (len(config.BlockedIPv4) > 0 || config.Proxy.Enabled == 1)
+	return (config.ProtectAll || len(config.MonitoredPIDs) > 0) && (len(config.BlockedIPv4) > 0 || len(config.BlockedIPv6) > 0 || config.Proxy.Enabled == 1)
 }
 
 func linuxEnforcerConfigFromRuntimePolicy(policy RuntimePolicyResponse) (LinuxEnforcerConfig, error) {
@@ -170,9 +178,16 @@ func linuxEnforcerConfigFromRuntimePolicy(policy RuntimePolicyResponse) (LinuxEn
 	for _, raw := range policy.BlockedIPv4 {
 		ip, err := parseIPv4(raw)
 		if err != nil {
-			return LinuxEnforcerConfig{}, fmt.Errorf("parse blocked ip from policy: %w", err)
+			return LinuxEnforcerConfig{}, fmt.Errorf("parse blocked IPv4 from policy: %w", err)
 		}
 		config.BlockedIPv4 = append(config.BlockedIPv4, ip)
+	}
+	for _, raw := range policy.BlockedIPv6 {
+		ip, err := parseIPv6(raw)
+		if err != nil {
+			return LinuxEnforcerConfig{}, fmt.Errorf("parse blocked IPv6 from policy: %w", err)
+		}
+		config.BlockedIPv6 = append(config.BlockedIPv6, ip)
 	}
 
 	if policy.ProxyIPv4 != "" && policy.ProxyPort > 0 {
@@ -232,4 +247,33 @@ func parseIPv4(raw string) (uint32, error) {
 	// key in native-endian order. A big-endian numeric value mismatches
 	// the BPF lookup key on amd64/arm64.
 	return binary.NativeEndian.Uint32(ip), nil
+}
+
+
+// parseIPv6 rejects IPv4 and IPv4-mapped IPv6 values: those must be
+// expressed as IPv4 policy entries, not silently interpreted as IPv6.
+func parseIPv6(raw string) ([16]byte, error) {
+	var result [16]byte
+	parsed := net.ParseIP(strings.TrimSpace(raw))
+	if parsed == nil || parsed.To4() != nil || parsed.To16() == nil {
+		return result, fmt.Errorf("invalid native IPv6 address %q", raw)
+	}
+	copy(result[:], parsed.To16())
+	return result, nil
+}
+
+func parseIPv6CSV(raw string) ([][16]byte, error) {
+	ips := make([][16]byte, 0)
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		ip, err := parseIPv6(part)
+		if err != nil {
+			return nil, err
+		}
+		ips = append(ips, ip)
+	}
+	return ips, nil
 }
