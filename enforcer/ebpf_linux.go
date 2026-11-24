@@ -63,13 +63,12 @@ func attachEnforcer(cgroupPath string, config LinuxEnforcerConfig) (func(), erro
 		}
 		_ = objects.Close()
 	}, nil
-
 }
 
 type networkHook struct {
-	name string
-	attach ebpf.AttachType
-	program *ebpf.Program
+	name      string
+	attach    ebpf.AttachType
+	program   *ebpf.Program
 	pinSuffix string
 }
 

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"syscall"
- 
+
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/sys/unix"
 )
@@ -120,7 +120,7 @@ func attachPinnedGuardedEnforcer(cgroup string, config LinuxEnforcerConfig) (str
 }
 
 // Called only after the entire protected cgroup has been stopped and proven
-// unpopulated. Missing optional pins are supported for older workloads and
+// unpopulated. Missing pins are supported for older workloads and
 // for retries after partially successful cleanup.
 func unpinGuardedEnforcer(name string) error {
 	base, err := guardedPinPath(name)
@@ -130,7 +130,7 @@ func unpinGuardedEnforcer(name string) error {
 	for i := len(guardedNetworkPinSuffixes)-1; i >= 0; i-- {
 		pin := base + guardedNetworkPinSuffixes[i]
 		attached, err := link.LoadPinnedLink(pin, nil)
-		if os.IsNotExist(err) && i != 0 {
+		if os.IsNotExist(err) {
 			continue
 		}
 		if err != nil {

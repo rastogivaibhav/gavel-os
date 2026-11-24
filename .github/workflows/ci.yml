@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main", "master"]
   pull_request:
-    branches: ["main", "master"]
+    branches: ["main", "master", "feat/linux-ipv6-connect6-20261124"]
 
 jobs:
   # ── Go enforcer tests ────────────────────────────────────────────────────────
@@ -171,7 +171,7 @@ jobs:
   # Never run arbitrary fork-contributed code with elevated kernel privileges.
   kernel-denial-proof:
     name: Kernel IPv4 Denial (ephemeral VM)
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/linux-ipv6-connect6-20261124' }}
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (github.head_ref == 'feat/linux-ipv6-connect6-20261124' || github.head_ref == 'feat/linux-udp-sendmsg-20261124') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -189,6 +189,11 @@ jobs:
             sudo mount -t bpf bpf /sys/fs/bpf
           fi
           findmnt -n -o FSTYPE --target /sys/fs/bpf | grep -qx bpf
+      - name: Record isolated kernel environment
+        run: |
+          uname -a
+          sudo sh -c 'grep -E "^(CapEff|CapBnd):" /proc/self/status'
+          stat -fc %T /sys/fs/cgroup
       - name: Compile kernel proof test
         working-directory: enforcer
         run: |
@@ -202,11 +207,11 @@ jobs:
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
             -test.run TestKernelGuardedAgentAndDescendants -test.v -test.timeout=55s
-      - name: Assert standalone monitored PID IPv6 kernel denial
+      - name: Assert standalone monitored PID IPv6 TCP and native UDP kernel denial
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 65s /tmp/gavel-kernel.test \
             -test.run TestKernelConnect6DenialForMonitoredPID -test.v -test.timeout=60s
-      - name: Assert IPv6 kernel deny is inherited by agent child
+      - name: Assert IPv6 TCP and native UDP denial inherited by agent child
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 75s /tmp/gavel-kernel.test \
             -test.run TestKernelGuardedIPv6AndDescendants -test.v -test.timeout=70s

@@ -127,6 +127,7 @@ func TestKernelSupervisorSIGKILLRetainsBPF(t *testing.T) {
 		t.Fatal("requires privileged disposable Linux VM")
 	}
 	allowedV6, deniedV6 := ipv6ProofListeners(t)
+	udp := setupUDPProof(t)
 	allowed, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -217,6 +218,11 @@ func TestKernelSupervisorSIGKILLRetainsBPF(t *testing.T) {
 		t.Fatalf("IPv6 BPF link was not pinned before starting child: %v", err)
 	}
 	_ = l6.Close()
+	for _, suffix := range []string{"_udp4", "_udp6"} {
+		l, err := link.LoadPinnedLink(pin+suffix, nil)
+		if err != nil { t.Fatalf("missing required UDP link %s: %v", suffix, err) }
+		_ = l.Close()
+	}
 	t.Logf("pre-crash: protected descendant pid=%d pinned IPv4 link=%s and IPv6 link=%s", pid, pin, pin6)
 
 	if err := supervisor.Process.Kill(); err != nil {
@@ -234,6 +240,11 @@ func TestKernelSupervisorSIGKILLRetainsBPF(t *testing.T) {
 	if _, err := os.Stat(pin6); err != nil {
 		t.Fatalf("SECURITY FAILURE: pinned IPv6 BPF link disappeared after SIGKILL: %v", err)
 	}
+	for _, suffix := range []string{"_udp4", "_udp6"} {
+		if _, err := os.Stat(pin+suffix); err != nil {
+			t.Fatalf("SECURITY FAILURE: UDP pin missing after SIGKILL: %v", err)
+		}
+	}
 	if err := os.WriteFile(filepath.Join(dir, "after-sigkill-gate"), []byte("go"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +255,8 @@ func TestKernelSupervisorSIGKILLRetainsBPF(t *testing.T) {
 	if strings.TrimSpace(string(after)) != "KERNEL_DENIED_AFTER_SIGKILL" {
 		t.Fatalf("unexpected post-crash evidence: %q", after)
 	}
-	t.Log("KERNEL PROOF: survivor received IPv4 AND IPv6 EPERM/EACCES after supervisor SIGKILL")
+	assertUDPReceivers(t, udp, 2)
+	t.Log("KERNEL PROOF: survivor received IPv4 AND IPv6 TCP and UDP EPERM/EACCES after supervisor SIGKILL")
 
 	if err := recoverGuardedAgent(cgroupName); err != nil {
 		t.Fatalf("independent trusted recovery failed: %v", err)
@@ -254,6 +266,11 @@ func TestKernelSupervisorSIGKILLRetainsBPF(t *testing.T) {
 	}
 	if _, err := os.Stat(pin6); !os.IsNotExist(err) {
 		t.Fatalf("IPv6 pin still present after recovery: %v", err)
+	}
+	for _, suffix := range []string{"_udp4", "_udp6"} {
+		if _, err := os.Stat(pin+suffix); !os.IsNotExist(err) {
+			t.Fatalf("UDP pin still present after recovery: %v", err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join("/sys/fs/cgroup", cgroupName)); !os.IsNotExist(err) {
 		t.Fatalf("cgroup still present after recovery: %v", err)
