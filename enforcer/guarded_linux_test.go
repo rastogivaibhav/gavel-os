@@ -118,6 +118,7 @@ func guardedDial(t *testing.T) {
 	}
 	checkGuardedIPv6(t)
 	checkUDPProof(t)
+	checkGuardedSyscallPolicy(t)
 }
 
 func TestKernelGuardedChildProbe(t *testing.T) {

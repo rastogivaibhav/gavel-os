@@ -132,12 +132,19 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	if err := validateTrustedDirectoryChain(filepath.Dir(launcher)); err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: untrusted setpriv parent: %w", err)
 	}
+	filter, err := guardedSeccompFile()
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: cannot prepare syscall policy: %w", err)
+	}
+	defer filter.Close()
 	args := append([]string{
 		"--no-new-privs", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all",
 		"--reuid="+strconv.FormatUint(uint64(uid), 10), "--regid="+strconv.FormatUint(uint64(gid), 10),
-		"--clear-groups", "--pdeathsig", "keep", "--",
+		"--clear-groups", "--pdeathsig", "keep", "--seccomp-filter", "/proc/self/fd/3", "--",
 	}, argv...)
 	cmd := exec.Command(launcher, args...)
+	// FD 3 contains only the immutable public filter, never a privileged socket.
+	cmd.ExtraFiles = []*os.File{filter}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.Env = guardedWorkloadEnvironment(os.Environ())
 	// Atomic cgroup assignment at process creation eliminates the interval

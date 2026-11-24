@@ -87,3 +87,7 @@ Scope: A0/A1 unprivileged workloads, native-family unconnected UDP only; IPv4-ma
 ## Native UDP and containment evidence update
 
 Native unconnected UDP tests passed in [run 45434260219](https://github.com/rastogivaibhav/gavel-os/actions/runs/45434260219); PRs #12/#13 merged into master at f70a893a32bdc806eade825d7f80447215cb6ffd. T03/T04 KERNEL_TESTED for scoped native TCP and unconnected UDP only. [Run 45504587779](https://github.com/rastogivaibhav/gavel-os/actions/runs/45504587779) on draft PR #14 passed the guarded setuid syscall, positive-control setuid executable and root-owned sibling migration denial tests. Capability bounding and cgroup ownership gate now implemented on PR #14, pending privileged CI. T08/T09 remain open; neither namespace restrictions nor general kernel tamper resistance nor independent verification has been demonstrated.
+
+## Seccomp containment extension (implemented, unverified)
+
+PR #14 adds mandatory seccomp before untrusted exec, scoped namespace/syscall and alternate socket family restrictions. T08/T09 remain open until kernel tests and additional tamper probes are complete. No namespace-isolation, full network mediation or host-root protection claim.
