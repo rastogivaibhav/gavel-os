@@ -219,3 +219,8 @@ jobs:
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 85s /tmp/gavel-kernel.test \
             -test.run TestKernelSupervisorSIGKILLRetainsBPF -test.v -test.timeout=80s
+
+      - name: Assert actual privilege escalation and sibling cgroup migration denial
+        run: |
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
+            -test.run '^TestKernelGuardedContainment$' -test.v -test.timeout=55s
