@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from ipaddress import IPv4Address
+from ipaddress import IPv4Address, IPv6Address
 
 from fastapi import HTTPException, Request
 
@@ -178,6 +178,22 @@ def _normalize_ipv4_values(values: list[str]) -> list[str]:
     return normalized
 
 
+def _normalize_ipv6_values(values: list[str]) -> list[str]:
+    # A configured security rule must never disappear silently during
+    # normalization. A policy error aborts the response, causing Linux
+    # enforcement-required startup to refuse unprotected agent launch.
+    normalized: list[str] = []
+    for value in values:
+        try:
+            address = IPv6Address(value)
+        except ValueError as exc:
+            raise ValueError(f"invalid blocked IPv6 destination: {value!r}") from exc
+        if address.ipv4_mapped is not None:
+            raise ValueError(f"IPv4-mapped address belongs in IPv4 policy: {value!r}")
+        normalized.append(str(address))
+    return normalized
+
+
 def build_runtime_policy(
     *,
     app,
@@ -195,6 +211,7 @@ def build_runtime_policy(
 
     monitored_pids = _int_csv_env("GAVEL_RUNTIME_MONITORED_PIDS")
     blocked_ipv4 = _normalize_ipv4_values(_csv_env("GAVEL_RUNTIME_BLOCKED_IPS"))
+    blocked_ipv6 = _normalize_ipv6_values(_csv_env("GAVEL_RUNTIME_BLOCKED_IPV6"))
     blocked_targets = _csv_env("GAVEL_RUNTIME_BLOCKED_TARGETS")
     monitored_processes = _csv_env("GAVEL_RUNTIME_MONITORED_PROCESSES")
     proxy_ipv4 = None
@@ -215,7 +232,7 @@ def build_runtime_policy(
             proxy_port = None
 
     if normalized_runtime_os == "linux":
-        # Linux eBPF runtime currently consumes IPv4 targets only.
+        # Linux consumes blocked IPv4 and IPv6 literals; hostname targets remain unsupported.
         blocked_targets = []
     elif normalized_runtime_os == "windows":
         # Windows can consume both hostnames and literal IPs; fold IPs into the target set.
@@ -225,6 +242,7 @@ def build_runtime_policy(
         (
             monitored_pids,
             blocked_ipv4,
+            blocked_ipv6,
             blocked_targets,
             monitored_processes,
             proxy_ipv4 and proxy_port,
@@ -246,6 +264,7 @@ def build_runtime_policy(
         reason_code=reason_code,
         monitored_pids=monitored_pids,
         blocked_ipv4=blocked_ipv4,
+        blocked_ipv6=blocked_ipv6,
         blocked_targets=blocked_targets,
         monitored_processes=monitored_processes,
         proxy_ipv4=proxy_ipv4,

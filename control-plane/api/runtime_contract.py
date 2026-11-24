@@ -20,6 +20,7 @@ ALLOWED_METADATA_KEYS = {
     "status",
     "runtime_mode",
     "enforcement_capable",
+    "enforcement_attached",
     # ── Performance / diagnostics ─────────────────────────────────────────────
     "latency_ms",
     "error_class",
@@ -45,6 +46,7 @@ ALLOWED_METADATA_KEYS = {
     "control_plane_status",
     "monitored_pid_count",
     "blocked_ipv4_count",
+    "blocked_ipv6_count",
     "proxy_redirect",
     "reason_description",
     "recommended_action",
@@ -172,6 +174,7 @@ class MachinePolicyResponse(MachineRuntimeState):
     reason_code: str = Field(min_length=1)
     monitored_pids: list[int] = Field(default_factory=list)
     blocked_ipv4: list[str] = Field(default_factory=list)
+    blocked_ipv6: list[str] = Field(default_factory=list)
     blocked_targets: list[str] = Field(default_factory=list)
     monitored_processes: list[str] = Field(default_factory=list)
     proxy_ipv4: str | None = None
