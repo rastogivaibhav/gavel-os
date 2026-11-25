@@ -57,17 +57,23 @@ func TestGuardedFilesystemProbe(t *testing.T) {
 	if os.Getenv(guardedFilesystemEnv) != "" { t.Fatal("host policy leaked into payload") }
 	if data,err := os.ReadFile(allowed); err != nil || string(data)!="allowed" { t.Fatalf("allowed read: %q %v",data,err) }
 	if err := os.WriteFile(filepath.Join(root,"work","new"),[]byte("permitted"),0600); err != nil { t.Fatal(err) }
-	if err := exec.Command(allowedExe).Run(); err != nil { t.Fatalf("allowed exec: %v",err) }
+	run := func(path string) error {
+		cmd := exec.Command(path)
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+		return cmd.Run()
+	}
+	if err := run(allowedExe); err != nil { t.Fatalf("allowed exec: %v",err) }
 	_,err := os.ReadFile(secret); deny("secret read",err)
 	f,err := os.OpenFile(config,os.O_WRONLY|os.O_TRUNC,0); if f!=nil { f.Close() }; deny("config write",err)
 	deny("config truncate",os.Truncate(config,0))
 	deny("config remove",os.Remove(config))
 	deny("config rename",os.Rename(config,filepath.Join(root,"work","moved")))
-	deny("unauthorized execute",exec.Command(deniedExe).Run())
+	deny("unauthorized execute",run(deniedExe))
 	if mode == "guarded" {
-		exe,err := os.Executable(); if err != nil { t.Fatal(err) }
+		exe := os.Getenv("GAVEL_FS_TEST_EXE")
 		cmd := exec.Command(exe,"-test.run=^TestGuardedFilesystemProbe$","-test.v")
 		cmd.Env = append(os.Environ(),"GAVEL_FS_TEST_MODE=descendant")
+		cmd.Stdin = os.Stdin
 		out,err := cmd.CombinedOutput()
 		if err != nil || !strings.Contains(string(out),"PASS: TestGuardedFilesystemProbe") { t.Fatalf("descendant proof: %v %s",err,out) }
 	}
@@ -83,7 +89,9 @@ func TestKernelGuardedFilesystem(t *testing.T) {
 	for _,sub := range []string{"private","work","bin"} {
 		path := filepath.Join(root,sub)
 		if err := os.Mkdir(path,0777); err != nil { t.Fatal(err) }
-		if err := os.Chmod(path,0777); err != nil { t.Fatal(err) }
+		mode := os.FileMode(0777)
+		if sub == "bin" { mode = 0755 }
+		if err := os.Chmod(path,mode); err != nil { t.Fatal(err) }
 	}
 	for _,item := range []struct{path,data string}{{"private/secret","synthetic-secret"},{"private/config","original"},{"work/allowed","allowed"}} {
 		path:=filepath.Join(root,item.path)
@@ -96,6 +104,7 @@ func TestKernelGuardedFilesystem(t *testing.T) {
 	}
 	exe,err:=os.Executable(); if err!=nil { t.Fatal(err) }
 	t.Setenv("GAVEL_FS_TEST_ROOT",root)
+	t.Setenv("GAVEL_FS_TEST_EXE",exe)
 	control:=exec.Command(exe,"-test.run=^TestGuardedFilesystemProbe$","-test.v")
 	control.Env=append(os.Environ(),"GAVEL_FS_TEST_MODE=control")
 	control.SysProcAttr=&syscall.SysProcAttr{Credential:&syscall.Credential{Uid:65534,Gid:65534}}
