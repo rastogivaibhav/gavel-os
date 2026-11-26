@@ -56,6 +56,7 @@ func guardedSeccompProgram() ([]unix.SockFilter, error) {
 		unix.SYS_INIT_MODULE, unix.SYS_FINIT_MODULE, unix.SYS_DELETE_MODULE,
 		unix.SYS_KEXEC_LOAD, unix.SYS_REBOOT, unix.SYS_SWAPON, unix.SYS_SWAPOFF,
 		unix.SYS_PTRACE, unix.SYS_PROCESS_VM_WRITEV, unix.SYS_IO_URING_SETUP,
+		unix.SYS_PIDFD_GETFD,
 	} {
 		p = append(p, ins(scEqual, nr, 0, 1), ins(scReturn, deny, 0, 0))
 	}
@@ -71,23 +72,32 @@ func guardedSeccompProgram() ([]unix.SockFilter, error) {
 		ins(scReturn, deny, 0, 0),
 		ins(scReturn, scAllow, 0, 0),
 	)
-	for _, nr := range []uint32{unix.SYS_SOCKET, unix.SYS_SOCKETPAIR} {
-		// Only UNIX, IPv4 and IPv6 socket families; no raw sockets. UNIX
-		// IPC is deliberately still available and is not network-mediated.
-		p = append(p,
-			ins(scEqual, nr, 0, 10),
-			ins(scLoad, 16, 0, 0),
-			ins(scEqual, unix.AF_UNIX, 3, 0),
-			ins(scEqual, unix.AF_INET, 2, 0),
-			ins(scEqual, unix.AF_INET6, 1, 0),
-			ins(scReturn, deny, 0, 0),
-			ins(scLoad, 24, 0, 0),
-			ins(scAnd, 0xf, 0, 0),
-			ins(scEqual, unix.SOCK_RAW, 0, 1),
-			ins(scReturn, deny, 0, 0),
-			ins(scReturn, scAllow, 0, 0),
-		)
-	}
+	// Strict guarded mode: no new externally addressable UNIX sockets.
+	// Private connected stream pairs remain available for communication
+	// within the same protection domain. Datagram pairs are not permitted.
+	p = append(p,
+		ins(scEqual, unix.SYS_SOCKET, 0, 9),
+		ins(scLoad, 16, 0, 0),
+		ins(scEqual, unix.AF_INET, 2, 0),
+		ins(scEqual, unix.AF_INET6, 1, 0),
+		ins(scReturn, deny, 0, 0),
+		ins(scLoad, 24, 0, 0),
+		ins(scAnd, 0xf, 0, 0),
+		ins(scEqual, unix.SOCK_RAW, 0, 1),
+		ins(scReturn, deny, 0, 0),
+		ins(scReturn, scAllow, 0, 0),
+	)
+	p = append(p,
+		ins(scEqual, unix.SYS_SOCKETPAIR, 0, 8),
+		ins(scLoad, 16, 0, 0),
+		ins(scEqual, unix.AF_UNIX, 1, 0),
+		ins(scReturn, deny, 0, 0),
+		ins(scLoad, 24, 0, 0),
+		ins(scAnd, 0xf, 0, 0),
+		ins(scEqual, unix.SOCK_STREAM, 1, 0),
+		ins(scReturn, deny, 0, 0),
+		ins(scReturn, scAllow, 0, 0),
+	)
 	return append(p, ins(scReturn, scAllow, 0, 0)), nil
 }
 
