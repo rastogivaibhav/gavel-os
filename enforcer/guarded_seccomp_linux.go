@@ -57,6 +57,13 @@ func guardedSeccompProgram() ([]unix.SockFilter, error) {
 		unix.SYS_KEXEC_LOAD, unix.SYS_REBOOT, unix.SYS_SWAPON, unix.SYS_SWAPOFF,
 		unix.SYS_PTRACE, unix.SYS_PROCESS_VM_WRITEV, unix.SYS_IO_URING_SETUP,
 		unix.SYS_PIDFD_GETFD, unix.SYS_PROCESS_VM_READV,
+		// Shared host IPC objects are not authorized by the agent's network
+		// or filesystem policy. Deny System V IPC and POSIX message queues.
+		unix.SYS_SHMGET, unix.SYS_SHMAT, unix.SYS_SHMDT, unix.SYS_SHMCTL,
+		unix.SYS_MSGGET, unix.SYS_MSGSND, unix.SYS_MSGRCV, unix.SYS_MSGCTL,
+		unix.SYS_SEMGET, unix.SYS_SEMOP, unix.SYS_SEMTIMEDOP, unix.SYS_SEMCTL,
+		unix.SYS_MQ_OPEN, unix.SYS_MQ_UNLINK, unix.SYS_MQ_TIMEDSEND,
+		unix.SYS_MQ_TIMEDRECEIVE, unix.SYS_MQ_NOTIFY, unix.SYS_MQ_GETSETATTR,
 	} {
 		p = append(p, ins(scEqual, nr, 0, 1), ins(scReturn, deny, 0, 0))
 	}

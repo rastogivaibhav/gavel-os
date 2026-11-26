@@ -22,6 +22,11 @@ func checkGuardedSyscallPolicy(t *testing.T) {
 	for _, nr := range []uintptr{
 		unix.SYS_UNSHARE, unix.SYS_SETNS, unix.SYS_BPF,
 		unix.SYS_PERF_EVENT_OPEN, unix.SYS_MOUNT, unix.SYS_IO_URING_SETUP, unix.SYS_PIDFD_GETFD, unix.SYS_PROCESS_VM_READV,
+		unix.SYS_SHMGET, unix.SYS_SHMAT, unix.SYS_SHMDT, unix.SYS_SHMCTL,
+		unix.SYS_MSGGET, unix.SYS_MSGSND, unix.SYS_MSGRCV, unix.SYS_MSGCTL,
+		unix.SYS_SEMGET, unix.SYS_SEMOP, unix.SYS_SEMTIMEDOP, unix.SYS_SEMCTL,
+		unix.SYS_MQ_OPEN, unix.SYS_MQ_UNLINK, unix.SYS_MQ_TIMEDSEND,
+		unix.SYS_MQ_TIMEDRECEIVE, unix.SYS_MQ_NOTIFY, unix.SYS_MQ_GETSETATTR,
 	} {
 		_, _, errno := unix.RawSyscall6(nr, 0, 0, 0, 0, 0, 0)
 		if errno != unix.EPERM {

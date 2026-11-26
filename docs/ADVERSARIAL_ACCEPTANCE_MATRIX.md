@@ -114,3 +114,7 @@ PRs #14–#17 merged to master at 73043be9d052bb679b48b5db8cc2bddb2abefcf8, tree
 ## P0.4 helper identity slice
 
 PR #18 [run 45906222748](https://github.com/rastogivaibhav/gavel-os/actions/runs/45906222748) passed six jobs including mapped and connected UDP receiver evidence. P0.4 adds exclusive UID lease and process credential admission checks, plus process_vm_readv seccomp denial. Tests require a same-UID external helper to prevent startup, concurrent lease refusal, release after helper exit, and positive guarded launch. Host must exclusively assign the UID; process scanning is not an atomic security boundary against concurrent external launch. No claim that all helper channels are closed. New CI pending.
+
+## P0.4 system IPC slice
+
+PR #19 [run 45907820954](https://github.com/rastogivaibhav/gavel-os/actions/runs/45907820954) passed all six jobs including exclusive UID/helper admission. PRs #18/#19 merged, master tree identical to #19. System V shared memory/message queues/semaphores and POSIX message queue syscalls now denied by guarded seccomp. Real fixture tests require unguarded positive controls, guarded parent and descendants receiving EPERM, unchanged host objects, and allowed private memory/pipes. New evidence pending. POSIX shared memory files and other filesystem/IPC/helper paths remain unresolved; no broad helper protection claim.
