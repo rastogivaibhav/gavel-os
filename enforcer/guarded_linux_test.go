@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -34,6 +36,7 @@ func TestGuardedAgentIdentityRequiresExplicitUnprivilegedUser(t *testing.T) {
 
 func TestGuardedAgentRemovesSupervisorSecrets(t *testing.T) {
 	out := guardedWorkloadEnvironment([]string{
+		"LD_PRELOAD=bad", "GCONV_PATH=bad", "GLIBC_TUNABLES=bad",
 		"GAVEL_MACHINE_KEY=never-expose", "GAVEL_AGENT_UID=65534",
 		"GAVEL_AGENT_GID=65534", "GAVEL_BLOCKED_IPS=127.0.0.2",
 		"GAVEL_ENGINE_URL=http://localhost:8000",
@@ -77,6 +80,25 @@ func guardedDial(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Fatal("test workload unexpectedly runs with root privileges")
 	}
+	groups, err := os.Getgroups()
+	if err != nil || len(groups) != 0 {
+		t.Fatalf("SECURITY FAILURE: inherited supplementary groups: %v (%v)", groups, err)
+	}
+	status, err := os.ReadFile("/proc/self/status")
+	if err != nil { t.Fatal(err) }
+	fields := map[string]string{}
+	for _, line := range strings.Split(string(status), "\n") {
+		key, value, ok := strings.Cut(line, ":")
+		if ok { fields[key] = strings.TrimSpace(value) }
+	}
+	if fields["NoNewPrivs"] != "1" {
+		t.Fatal("SECURITY FAILURE: no_new_privs not active")
+	}
+	for _, key := range []string{"CapInh", "CapPrm", "CapEff", "CapAmb", "CapBnd"} {
+		if fields[key] != "0000000000000000" {
+			t.Fatalf("SECURITY FAILURE: %s=%q", key, fields[key])
+		}
+	}
 	if data, err := os.ReadFile("/proc/self/cgroup"); err != nil || !strings.Contains(string(data), "gavel-agent-") {
 		t.Fatalf("workload not inside isolated protected cgroup: %q %v", string(data), err)
 	}
@@ -96,6 +118,7 @@ func guardedDial(t *testing.T) {
 	}
 	checkGuardedIPv6(t)
 	checkUDPProof(t)
+	checkGuardedSyscallPolicy(t)
 }
 
 func TestKernelGuardedChildProbe(t *testing.T) {
@@ -166,4 +189,96 @@ func TestGuardedRunRefusesMissingIdentityWithoutExecuting(t *testing.T) {
 	if err := runGuardedAgent([]string{"/bin/true"}); err == nil {
 		t.Fatal("must reject before creating cgroup or executing agent")
 	}
+}
+
+func TestKernelGuardedContainmentProbe(t *testing.T) {
+	if os.Getenv("GAVEL_CONTAINMENT_PROBE") != "1" { t.Skip("isolated containment probe") }
+	if os.Geteuid() != 65534 || os.Getuid() != 65534 || os.Getgid() != 65534 || os.Getegid() != 65534 {
+		t.Fatalf("unexpected real/effective identities: %d/%d %d/%d", os.Getuid(), os.Geteuid(), os.Getgid(), os.Getegid())
+	}
+	status, err := os.ReadFile("/proc/self/status")
+	if err != nil { t.Fatal(err) }
+	if !strings.Contains(string(status), "CapBnd:\t0000000000000000") {
+		t.Fatalf("capability bounding set not empty")
+	}
+	if err := syscall.Setuid(0); !errors.Is(err, syscall.EPERM) { t.Fatalf("setuid denial: %v", err) }
+	target := os.Getenv("GAVEL_CONTAINMENT_TARGET")
+	before, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil { t.Fatal(err) }
+	err = os.WriteFile(filepath.Join(target, "cgroup.procs"), []byte(strconv.Itoa(os.Getpid())), 0600)
+	if !errors.Is(err, syscall.EACCES) && !errors.Is(err, syscall.EPERM) { t.Fatalf("migration must be denied: %v", err) }
+	after, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil || string(before) != string(after) { t.Fatalf("cgroup changed: %q -> %q (%v)", before, after, err) }
+	out, err := exec.Command(os.Getenv("GAVEL_CONTAINMENT_SETUID"), "-u").CombinedOutput()
+	if err != nil || strings.TrimSpace(string(out)) != "65534" { t.Fatalf("setuid executable elevated or failed: %q %v", out, err) }
+	t.Log("KERNEL PROOF: setuid syscall, setuid executable and sibling cgroup migration denied")
+}
+
+func TestKernelGuardedContainment(t *testing.T) {
+	if os.Getenv("GAVEL_RUN_KERNEL_TESTS") != "1" { t.Skip("requires isolated privileged VM") }
+	if os.Geteuid() != 0 { t.Fatal("requires root") }
+	target, err := os.MkdirTemp("/sys/fs/cgroup", "gavel-test-sibling-")
+	if err != nil { t.Fatal(err) }
+	defer os.Remove(target)
+	dir, err := os.MkdirTemp("/tmp", "gavel-setuid-proof-")
+	if err != nil { t.Fatal(err) }
+	defer os.RemoveAll(dir)
+	if err := os.Chmod(dir, 0755); err != nil { t.Fatal(err) }
+	data, err := os.ReadFile("/usr/bin/id")
+	if err != nil { t.Fatal(err) }
+	fixture := filepath.Join(dir, "id")
+	if err := os.WriteFile(fixture, data, 0755); err != nil { t.Fatal(err) }
+	if err := os.Chmod(fixture, 0755|os.ModeSetuid); err != nil { t.Fatal(err) }
+	// Positive control: prove the fixture actually elevates without the guard.
+	control := exec.Command(fixture, "-u")
+	control.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid:65534,Gid:65534}}
+	out, err := control.CombinedOutput()
+	if err != nil || strings.TrimSpace(string(out)) != "0" { t.Fatalf("invalid setuid fixture (nosuid mount or other restriction): %q %v",out,err) }
+	t.Setenv("GAVEL_MACHINE_KEY", "")
+	t.Setenv("GAVEL_MONITORED_PIDS", "")
+	t.Setenv("GAVEL_BLOCKED_IPS", "127.0.0.2")
+	t.Setenv("GAVEL_AGENT_UID", "65534")
+	t.Setenv("GAVEL_AGENT_GID", "65534")
+	t.Setenv("GAVEL_CONTAINMENT_PROBE", "1")
+	t.Setenv("GAVEL_CONTAINMENT_TARGET", target)
+	t.Setenv("GAVEL_CONTAINMENT_SETUID", fixture)
+	exe, err := os.Executable()
+	if err != nil { t.Fatal(err) }
+	if err := runGuardedAgent([]string{exe, "-test.run=^TestKernelGuardedContainmentProbe$", "-test.v"}); err != nil { t.Fatal(err) }
+}
+
+func TestGuardedRejectsRelativeOrSymlinkDirectory(t *testing.T) {
+	if err := validateTrustedDirectoryChain("relative/path"); err == nil {
+		t.Fatal("relative directory accepted")
+	}
+	dir := t.TempDir()
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink("/", link); err != nil { t.Fatal(err) }
+	if err := validateTrustedDirectoryChain(link); err == nil {
+		t.Fatal("symlink directory accepted")
+	}
+}
+
+func TestKernelGuardedRejectsDelegatedCgroup(t *testing.T) {
+	if os.Getenv("GAVEL_RUN_KERNEL_TESTS") != "1" { t.Skip("requires isolated privileged VM") }
+	if os.Geteuid() != 0 { t.Fatal("requires root") }
+	cg, err := os.MkdirTemp("/sys/fs/cgroup", "gavel-test-delegated-")
+	if err != nil { t.Fatal(err) }
+	defer os.Remove(cg)
+	if err := validateGuardedCgroup(cg); err != nil { t.Fatalf("trusted positive control: %v", err) }
+	if err := os.Chmod(filepath.Join(cg, "cgroup.procs"), 0666); err != nil { t.Fatal(err) }
+	if err := validateGuardedCgroup(cg); err == nil { t.Fatal("writable migration control accepted") }
+	if err := os.Chmod(filepath.Join(cg, "cgroup.procs"), 0644); err != nil { t.Fatal(err) }
+	if err := os.Chown(cg, 65534, 65534); err != nil { t.Fatal(err) }
+	if err := validateGuardedCgroup(cg); err == nil { t.Fatal("delegated directory accepted") }
+	t.Setenv("GAVEL_CGROUP_PATH", cg)
+	t.Setenv("GAVEL_MACHINE_KEY", "")
+	t.Setenv("GAVEL_MONITORED_PIDS", "")
+	t.Setenv("GAVEL_BLOCKED_IPS", "127.0.0.2")
+	t.Setenv("GAVEL_AGENT_UID", "65534")
+	t.Setenv("GAVEL_AGENT_GID", "65534")
+	if err := runGuardedAgent([]string{"/bin/true"}); err == nil || !strings.Contains(err.Error(), "untrusted cgroup parent") {
+		t.Fatalf("guarded launcher failed to reject delegated parent explicitly: %v", err)
+	}
+	t.Log("KERNEL PROOF: untrusted cgroup delegation rejected before workload launch")
 }

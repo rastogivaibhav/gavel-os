@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // runGuardedAgent launches ONLY new, unprivileged workloads in a dedicated
@@ -36,6 +38,10 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	if err != nil {
 		return err
 	}
+	fsArgs, err := guardedFilesystemArguments()
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: filesystem policy: %w", err)
+	}
 	preflight := runLinuxPreflight()
 	if !preflight.EnforcementCapable || !linuxEBPFProgramReady(preflight.EBPFProgramStatus) || !preflight.CgroupV2 {
 		return fmt.Errorf("SECURITY BLOCKER: kernel or cgroup preflight failed: %s", preflight.ReasonCode)
@@ -55,6 +61,9 @@ func runGuardedAgent(argv []string) (resultErr error) {
 		return fmt.Errorf("SECURITY BLOCKER: guarded workload requires a block or redirect policy")
 	}
 
+	if err := validateGuardedCgroup(preflight.CgroupPath); err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: untrusted cgroup parent: %w", err)
+	}
 	cg, err := os.MkdirTemp(preflight.CgroupPath, "gavel-agent-")
 	if err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: cannot create dedicated child cgroup: %w", err)
@@ -85,6 +94,9 @@ func runGuardedAgent(argv []string) (resultErr error) {
 		}
 	}()
 
+	if err := validateGuardedCgroup(cg); err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: untrusted protected cgroup: %w", err)
+	}
 	pin, err := attachPinnedGuardedEnforcer(cg, config)
 	if err != nil {
 		// If rollback failed, retain the empty cgroup for operator recovery.
@@ -108,8 +120,45 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	}
 	defer cgfd.Close()
 
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	// The trusted util-linux launcher must drop the capability bounding set
+	// while it still has CAP_SETPCAP, then drop all identities/groups before
+	// untrusted exec. No fallback to an incomplete credential transition.
+	// The privileged supervisor environment is host-controlled, not agent input.
+	launcher := "/usr/bin/setpriv"
+	info, err := os.Lstat(launcher)
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: trusted setpriv unavailable: %w", err)
+	}
+	owner, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || owner.Uid != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 {
+		return fmt.Errorf("SECURITY BLOCKER: setpriv must be a trusted root-owned executable")
+	}
+	if err := validateTrustedDirectoryChain(filepath.Dir(launcher)); err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: untrusted setpriv parent: %w", err)
+	}
+	filter, err := guardedSeccompFile()
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: cannot prepare syscall policy: %w", err)
+	}
+	defer filter.Close()
+	args := append([]string{
+		"--no-new-privs", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all",
+		"--reuid="+strconv.FormatUint(uint64(uid), 10), "--regid="+strconv.FormatUint(uint64(gid), 10),
+		"--clear-groups", "--pdeathsig", "keep", "--seccomp-filter", "/proc/self/fd/3",
+	}, fsArgs...)
+	args = append(args, "--")
+	args = append(args, argv...)
+	if len(fsArgs) != 0 {
+		log.Print("guarded launch requires Landlock filesystem allowlist")
+	} else {
+		log.Print("guarded launch: filesystem policy not configured; filesystem access is not governed by GavelOS")
+	}
+	cmd := exec.Command(launcher, args...)
+	// FD 3 contains only the immutable public filter, never a privileged socket.
+	cmd.ExtraFiles = []*os.File{filter}
+	if err := configureGuardedDescriptors(cmd); err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: descriptor isolation: %w", err)
+	}
 	cmd.Env = guardedWorkloadEnvironment(os.Environ())
 	// Atomic cgroup assignment at process creation eliminates the interval
 	// between fork and userspace moving the process into a cgroup.
@@ -117,8 +166,12 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		UseCgroupFD: true,
 		CgroupFD: int(cgfd.Fd()),
-		Credential: &syscall.Credential{Uid: uid, Gid: gid, NoSetGroups: true},
 		Pdeathsig: syscall.SIGKILL,
+	}
+	// Mark all ambient non-stdio descriptors close-on-exec. os/exec
+	// deliberately remaps only the sealed filter from ExtraFiles to FD 3.
+	if err := sealAmbientDescriptors(); err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: descriptor isolation unavailable: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: protected process could not be spawned inside cgroup: %w", err)
@@ -186,7 +239,15 @@ func guardedWorkloadEnvironment(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, entry := range env {
 		// The agent must not inherit the supervisor's policy or machine secrets.
-		if strings.HasPrefix(entry, "GAVEL_MACHINE_KEY=") ||
+		if strings.HasPrefix(entry, "LD_") ||
+			strings.HasPrefix(entry, "MALLOC_") ||
+			strings.HasPrefix(entry, "GLIBC_TUNABLES=") ||
+			strings.HasPrefix(entry, "GCONV_PATH=") ||
+			strings.HasPrefix(entry, "LOCPATH=") ||
+			strings.HasPrefix(entry, "NLSPATH=") ||
+			strings.HasPrefix(entry, "TZDIR=") ||
+			strings.HasPrefix(entry, "GAVEL_AGENT_FS_POLICY=") ||
+			strings.HasPrefix(entry, "GAVEL_MACHINE_KEY=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_UID=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_GID=") ||
 			strings.HasPrefix(entry, "GAVEL_BLOCKED_IPS=") ||
@@ -223,4 +284,64 @@ func waitProtectedCgroupEmpty(cg string, timeout time.Duration) error {
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
+}
+
+// This is intentionally conservative: refuse delegated, symlinked or writable
+// paths rather than assuming that the workload cannot manipulate its ancestry.
+// Host root, mount namespace and privileged supervisor are trusted assumptions.
+func validateTrustedDirectoryChain(path string) error {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return fmt.Errorf("expected clean absolute directory path: %q", path)
+	}
+	for current := path; ; current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err != nil {
+			return err
+		}
+		owner, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || owner.Uid != 0 || !info.IsDir() || info.Mode().Perm()&0022 != 0 {
+			return fmt.Errorf("directory must be root-owned and not group/world writable: %s", current)
+		}
+		if current == "/" {
+			return nil
+		}
+	}
+}
+
+func validateGuardedCgroup(path string) error {
+	if err := validateTrustedDirectoryChain(path); err != nil {
+		return err
+	}
+	var fs unix.Statfs_t
+	if err := unix.Statfs(path, &fs); err != nil {
+		return err
+	}
+	if fs.Type != unix.CGROUP2_SUPER_MAGIC {
+		return fmt.Errorf("expected real cgroup v2 filesystem: %s", path)
+	}
+	// Migration needs write access to the destination and common ancestor.
+	// Check control files for the entire cgroup ancestry on this mount.
+	for current := path; ; current = filepath.Dir(current) {
+		if err := unix.Statfs(current, &fs); err != nil {
+			return err
+		}
+		if fs.Type != unix.CGROUP2_SUPER_MAGIC {
+			break
+		}
+		for _, name := range []string{"cgroup.procs", "cgroup.threads"} {
+			file := filepath.Join(current, name)
+			info, err := os.Lstat(file)
+			if err != nil {
+				return err
+			}
+			owner, ok := info.Sys().(*syscall.Stat_t)
+			if !ok || owner.Uid != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 {
+				return fmt.Errorf("migration control must be root-owned and not group/world writable: %s", file)
+			}
+		}
+		if current == "/" {
+			break
+		}
+	}
+	return nil
 }

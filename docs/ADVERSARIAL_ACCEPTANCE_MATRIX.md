@@ -83,3 +83,26 @@ This is a **startup-fail-stop** improvement only; it does not deny connections f
 The UDP branch adds cgroup/sendmsg4 and cgroup/sendmsg6 to the same blocked-IP maps and both PID and guarded-cgroup identity modes. All four connect/sendmsg attachments are required; guarded execution requires all four pinned before launch. UDP sendmsg4 is deny-only: no proxy destination rewrite. Tests use direct Linux sendto and sendmsg syscalls to loopback-bound native IPv4/IPv6 UDP receivers, positive receipt and negative no-packet controls, legacy PID mode, guarded parent/child and repeated checks after supervisor SIGKILL. Recovery must remove all pins only after cgroup emptiness. No new kernel-tested status until privileged CI passes.
 
 Scope: A0/A1 unprivileged workloads, native-family unconnected UDP only; IPv4-mapped IPv6, inherited/preconnected sockets, raw/packet sockets, other UDP paths, trusted helper/IPC bypass, privileged cgroup migration, host-root and independent verification remain open. Existing blocklist is not a default-deny policy. Connected UDP and IPv4 proxy semantics require separate validation.
+
+## Native UDP and containment evidence update
+
+Native unconnected UDP tests passed in [run 45434260219](https://github.com/rastogivaibhav/gavel-os/actions/runs/45434260219); PRs #12/#13 merged into master at f70a893a32bdc806eade825d7f80447215cb6ffd. T03/T04 KERNEL_TESTED for scoped native TCP and unconnected UDP only. [Run 45504587779](https://github.com/rastogivaibhav/gavel-os/actions/runs/45504587779) on draft PR #14 passed the guarded setuid syscall, positive-control setuid executable and root-owned sibling migration denial tests. Capability bounding and cgroup ownership gate now implemented on PR #14, pending privileged CI. T08/T09 remain open; neither namespace restrictions nor general kernel tamper resistance nor independent verification has been demonstrated.
+
+## Seccomp containment extension (implemented, unverified)
+
+PR #14 adds mandatory seccomp before untrusted exec, scoped namespace/syscall and alternate socket family restrictions. T08/T09 remain open until kernel tests and additional tamper probes are complete. No namespace-isolation, full network mediation or host-root protection claim.
+
+## Filesystem and executable enforcement (T05–T07, implemented unverified)
+
+Stacked Landlock branch introduces opt-in host-supplied JSON read/write/execute allowlists through GAVEL_AGENT_FS_POLICY. A configured policy requires ABI >=3 and supported setpriv, rejects invalid or unresolved rules, does not downgrade, and applies before untrusted exec. Native executable rights cannot overlap configured writable paths. Explicitly handles file read/write/truncate, directory enumeration, remove, create, refer and execute. CI positive control must show ordinary DAC permits access to synthetic fixtures; guarded parent and descendant must deny forbidden operations and permit approved read/write/exec, with post-test filesystem state checks. Filesystem policy is not active on legacy launches without the environment setting. Landlock does not restrict pre-opened descriptors, all metadata operations, interpreter semantics, trusted helper access, or host-root actions. Independent verification pending.
+
+## Verification reconciliation — 2026-11-25
+PR #14 run 45511474402 passed all six jobs, including scoped seccomp and delegated-cgroup tests; draft remains unmerged. PR #15 run 45511559775 passed five jobs but failed privileged filesystem positive control at /dev/null open, before forbidden file/exec assertions. Corrected probe streams and executable path; no additional policy rights granted. T05–T07 remain IMPLEMENTED_UNVERIFIED pending rerun.
+
+## Filesystem verification and P0 descriptor gate
+
+PR #15 corrected run [45587216225](https://github.com/rastogivaibhav/gavel-os/actions/runs/45587216225) passed all six jobs including guarded Landlock proof; T05–T07 KERNEL_TESTED for the documented opt-in scope. PR #14 and #15 still draft. P0.1 adds close-on-exec ambient FD handling and strict standard streams in guarded mode; new privileged tests verify synthetic inaccessible file/socket positive controls and absence of those resources in agent/descendants. IMPLEMENTED_UNVERIFIED until CI. See P0_RESOURCE_ISOLATION_GOAL.md for acceptance and remaining gates.
+
+## P0 inherited resources and Unix IPC
+
+PR #16: [run 45774704902](https://github.com/rastogivaibhav/gavel-os/actions/runs/45774704902) passed six jobs including guarded inherited descriptor isolation. T05–T07 scoped Landlock proof passed in [run 45587216225](https://github.com/rastogivaibhav/gavel-os/actions/runs/45587216225). PRs #14–#16 remain unmerged. P0.2 adds strict Unix socket creation restrictions, private stream pairs only, and pidfd_getfd denial. New tests require negative and positive local IPC controls and descendants. No new evidence claim until CI completes; does not close trusted helper or general descriptor transfer via other paths.

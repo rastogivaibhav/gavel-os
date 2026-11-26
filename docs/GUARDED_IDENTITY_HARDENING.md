@@ -1,0 +1,21 @@
+# Guarded identity hardening — first containment gate
+
+The launcher previously set NoSetGroups=true, retaining the supervisor's supplementary groups across credential changes. Explicitly clear supplementary groups before executing any guarded workload. Existing privileged tests now require an empty supplementary group list in the guarded parent, descendant and crash survivor.
+
+This is a narrow identity hardening change, not proof of cgroup escape prevention. Remaining gates: no_new_privs before untrusted exec, capability and namespace restrictions, trusted cgroup ownership/delegation validation, hostile migration tests, inherited descriptors and alternate socket paths. No claim of root containment. CI and independent review pending.
+
+## Irreversible exec privilege gate
+
+Guarded launch uses fixed root-owned /usr/bin/setpriv with no_new_privs and cleared inheritable/ambient capabilities before executing the requested program. Existing credential drop clears supplementary groups; privileged tests assert NoNewPrivs and zero inheritable, permitted, effective and ambient capability sets in parent, descendants and crash survivor. Dynamic-loader environment variables are removed. Host installation and parent directories are trusted; missing launcher fails closed. Bounding capabilities, user namespaces, hostile migration, and actual setuid/file-capability exec probes remain separate gates. No claim of full privilege containment until those tests pass.
+
+## Adversarial acceptance probe
+
+Isolated VM only: compare a root-owned setuid id fixture with and without the guard; require the positive control to elevate and guarded execution to retain UID 65534. Require setuid(0) to return EPERM and attempted migration into a root-owned sibling cgroup to return EACCES/EPERM with unchanged membership. This does not establish protection against delegated writable cgroups, privileged helpers, user namespaces or host root. CI pending.
+
+## Capability bounding and cgroup ownership gate
+
+The guarded supervisor now invokes the fixed root-owned setpriv before dropping credentials so CAP_SETPCAP can clear the capability bounding set. setpriv must then drop real/effective UID and GID, clear groups and inheritable/ambient sets, and enforce no_new_privs before exec. The executable and all directory ancestors must be root-owned and not group/world writable. The host-controlled supervisor environment is trusted, with additional dynamic loader/locale variables removed; this is not a general secret allowlist. No fallback if required util-linux options are absent. All guarded tests now check CapBnd=0; the containment probe checks real/effective IDs too. Guarded startup and independent recovery validate the cgroup-v2 filesystem, root-owned non-writable directory ancestry and migration controls (cgroup.procs/threads). Privileged tests check rejection of writable controls and delegated directories, including refusal before agent launch. This is conservative and intentionally disallows delegated cgroups. Mount namespace/root authority and POSIX ACL or concurrent privileged mutations are outside this check; namespace creation and alternate socket paths remain open. New CI pending.
+
+## Mandatory syscall filter (pending verification)
+
+Guarded launches now pass a sealed memfd containing a native classic-BPF seccomp filter to trusted setpriv. Supported ABIs amd64/arm64 (only amd64 runner proof planned currently); mismatched ABI is killed, x32 rejected. Deny namespace management, namespace flags on clone, selected kernel management syscalls, ptrace/process_vm_writev, io_uring_setup and raw or non-UNIX/IPv4/IPv6 socket families. clone3 returns ENOSYS for conventional clone fallback. Tests exercise real kernel syscalls in a child of setpriv and in guarded parent/descendants/crash survivor, and require ordinary sockets to remain usable. This introduces a mandatory util-linux build with --seccomp-filter; unsupported hosts fail closed. The sealed filter FD may remain inherited but contains only public immutable instructions. This is not an exhaustive syscall allowlist, and does not cover inherited/passed sockets, UNIX IPC, all IP protocol paths, filesystem policy, or trusted privileged helpers. Independent verification pending.
