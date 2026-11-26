@@ -24,7 +24,7 @@ const (
 	scErrno = 0x00050000
 )
 
-func guardedSeccompProgram() ([]unix.SockFilter, error) {
+func guardedSeccompProgram(tcpOnly ...bool) ([]unix.SockFilter, error) {
 	var arch uint32
 	switch runtime.GOARCH {
 	case "amd64":
@@ -57,8 +57,27 @@ func guardedSeccompProgram() ([]unix.SockFilter, error) {
 		unix.SYS_KEXEC_LOAD, unix.SYS_REBOOT, unix.SYS_SWAPON, unix.SYS_SWAPOFF,
 		unix.SYS_PTRACE, unix.SYS_PROCESS_VM_WRITEV, unix.SYS_IO_URING_SETUP,
 		unix.SYS_PIDFD_GETFD, unix.SYS_PROCESS_VM_READV,
+		// Shared host IPC objects are not authorized by the agent's network
+		// or filesystem policy. Deny System V IPC and POSIX message queues.
+		unix.SYS_SHMGET, unix.SYS_SHMAT, unix.SYS_SHMDT, unix.SYS_SHMCTL,
+		unix.SYS_MSGGET, unix.SYS_MSGSND, unix.SYS_MSGRCV, unix.SYS_MSGCTL,
+		unix.SYS_SEMGET, unix.SYS_SEMOP, unix.SYS_SEMTIMEDOP, unix.SYS_SEMCTL,
+		unix.SYS_MQ_OPEN, unix.SYS_MQ_UNLINK, unix.SYS_MQ_TIMEDSEND,
+		unix.SYS_MQ_TIMEDRECEIVE, unix.SYS_MQ_NOTIFY, unix.SYS_MQ_GETSETATTR,
 	} {
 		p = append(p, ins(scEqual, nr, 0, 1), ins(scReturn, deny, 0, 0))
+	}
+	if len(tcpOnly)>0 && tcpOnly[0] {
+		// Outbound TCP only; private UNIX stream pairs still allowed.
+		// No listener or inbound accepted socket may create an alternate path.
+		for _,nr:=range []uint32{unix.SYS_LISTEN,unix.SYS_ACCEPT,unix.SYS_ACCEPT4} {
+			p=append(p,ins(scEqual,nr,0,1),ins(scReturn,deny,0,0))
+		}
+		// Reject TCP Fast Open send flags before a connect policy decision.
+		for _,c:=range []struct{nr,offset uint32}{{unix.SYS_SENDTO,40},{unix.SYS_SENDMSG,32},{unix.SYS_SENDMMSG,40}} {
+			p=append(p,ins(scEqual,c.nr,0,4),ins(scLoad,c.offset,0,0),
+				ins(scSet,unix.MSG_FASTOPEN,0,1),ins(scReturn,deny,0,0),ins(scLoad,0,0,0))
+		}
 	}
 	// clone3 passes a pointer; classic seccomp cannot inspect its flags.
 	// ENOSYS preserves libc fallback to the filtered clone syscall.
@@ -75,6 +94,24 @@ func guardedSeccompProgram() ([]unix.SockFilter, error) {
 	// Strict guarded mode: no new externally addressable UNIX sockets.
 	// Private connected stream pairs remain available for communication
 	// within the same protection domain. Datagram pairs are not permitted.
+	if len(tcpOnly)>0 && tcpOnly[0] {
+		p=append(p,
+			ins(scEqual,unix.SYS_SOCKET,0,13),
+			ins(scLoad,16,0,0),
+			ins(scEqual,unix.AF_INET,2,0),
+			ins(scEqual,unix.AF_INET6,1,0),
+			ins(scReturn,deny,0,0),
+			ins(scLoad,24,0,0),
+			ins(scAnd,0xf,0,0),
+			ins(scEqual,unix.SOCK_STREAM,1,0),
+			ins(scReturn,deny,0,0),
+			ins(scLoad,32,0,0),
+			ins(scEqual,0,2,0),
+			ins(scEqual,unix.IPPROTO_TCP,1,0),
+			ins(scReturn,deny,0,0),
+			ins(scReturn,scAllow,0,0),
+		)
+	} else {
 	p = append(p,
 		ins(scEqual, unix.SYS_SOCKET, 0, 9),
 		ins(scLoad, 16, 0, 0),
@@ -87,6 +124,7 @@ func guardedSeccompProgram() ([]unix.SockFilter, error) {
 		ins(scReturn, deny, 0, 0),
 		ins(scReturn, scAllow, 0, 0),
 	)
+	}
 	p = append(p,
 		ins(scEqual, unix.SYS_SOCKETPAIR, 0, 8),
 		ins(scLoad, 16, 0, 0),
@@ -103,8 +141,8 @@ func guardedSeccompProgram() ([]unix.SockFilter, error) {
 
 // setpriv reads the raw sock_filter array before exec. A sealed anonymous
 // file prevents mutation of the policy and avoids a persistent temp pathname.
-func guardedSeccompFile() (*os.File, error) {
-	program, err := guardedSeccompProgram()
+func guardedSeccompFile(tcpOnly ...bool) (*os.File, error) {
+	program, err := guardedSeccompProgram(tcpOnly...)
 	if err != nil { return nil, err }
 	fd, err := unix.MemfdCreate("gavel-seccomp", unix.MFD_CLOEXEC|unix.MFD_ALLOW_SEALING)
 	if err != nil { return nil, err }

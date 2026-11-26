@@ -9,6 +9,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
+	"golang.org/x/sys/unix"
 )
 
 type linuxEnforcerObjects struct {
@@ -16,6 +17,7 @@ type linuxEnforcerObjects struct {
 	BlockedIPv4          *ebpf.Map
 	BlockedIPv6          *ebpf.Map
 	ProxyConfig          *ebpf.Map
+	AllowedTCP           *ebpf.Map
 	GavelRedirectHandler *ebpf.Program
 	GavelIPv6Handler     *ebpf.Program
 	GavelUDP4Handler     *ebpf.Program
@@ -43,6 +45,12 @@ func attachEnforcer(cgroupPath string, config LinuxEnforcerConfig) (func(), erro
 		return func() {}, err
 	}
 
+	if config.ProtectAll {
+		if err := objects.freezeGuardedPolicy(); err != nil {
+			_ = objects.Close()
+			return func(){}, err
+		}
+	}
 	var attached []link.Link
 	for _, hook := range objects.networkHooks() {
 		l, err := link.AttachCgroup(link.CgroupOptions{
@@ -81,7 +89,7 @@ func (objects *linuxEnforcerObjects) networkHooks() []networkHook {
 	}
 }
 
-func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
+func loadLinuxEnforcerObjects(protectAll bool, tcpOnly ...bool) (*linuxEnforcerObjects, error) {
 	spec := &ebpf.CollectionSpec{
 		Maps: map[string]*ebpf.MapSpec{
 			"monitored_pids": {
@@ -102,6 +110,7 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 				ValueSize:  1,
 				MaxEntries: 1024,
 			},
+			"allowed_tcp": {Type: ebpf.Hash, KeySize: 20, ValueSize: 1, MaxEntries: 1024},
 			"proxy_config": {
 				Type:       ebpf.Array,
 				KeySize:    4,
@@ -141,6 +150,22 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 		},
 	}
 
+	// Guarded policy is a per-launch immutable snapshot. Forbid writes by
+	// kernel programs as well as freezing userspace mutation after population.
+	// Legacy PID mode retains its existing behavior.
+	if protectAll {
+		for _, specMap := range spec.Maps {
+			specMap.Flags |= unix.BPF_F_RDONLY_PROG
+		}
+	}
+	if len(tcpOnly) > 0 && tcpOnly[0] {
+		if !protectAll { return nil, fmt.Errorf("TCP service profile requires guarded cgroup") }
+		spec.Programs["gavel_redirect_handler"].Instructions = buildTCPServiceInstructions(false)
+		spec.Programs["gavel_ipv6_handler"].Instructions = buildTCPServiceInstructions(true)
+		for _, name := range []string{"gavel_udp4_handler", "gavel_udp6_handler"} {
+			spec.Programs[name].Instructions = asm.Instructions{asm.Mov.Imm(asm.R0, 0), asm.Return()}
+		}
+	}
 	collection, err := ebpf.NewCollection(spec)
 	if err != nil {
 		return nil, fmt.Errorf("load linux enforcer collection: %w", err)
@@ -151,6 +176,7 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 		BlockedIPv4:          collection.Maps["blocked_ipv4"],
 		BlockedIPv6:          collection.Maps["blocked_ipv6"],
 		ProxyConfig:          collection.Maps["proxy_config"],
+		AllowedTCP:           collection.Maps["allowed_tcp"],
 		GavelRedirectHandler: collection.Programs["gavel_redirect_handler"],
 		GavelIPv6Handler:     collection.Programs["gavel_ipv6_handler"],
 		GavelUDP4Handler:     collection.Programs["gavel_udp4_handler"],
@@ -166,6 +192,7 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 }
 
 func (objects *linuxEnforcerObjects) Close() error {
+	if objects.AllowedTCP != nil { _ = objects.AllowedTCP.Close() }
 	if objects.GavelUDP6Handler != nil {
 		_ = objects.GavelUDP6Handler.Close()
 	}
@@ -193,7 +220,32 @@ func (objects *linuxEnforcerObjects) Close() error {
 	return nil
 }
 
+// Freeze all guarded policy maps, including currently unused maps, before
+// any attach. A failure leaves no running untrusted workload.
+func (objects *linuxEnforcerObjects) freezeGuardedPolicy() error {
+	for _, item := range []struct{name string; m *ebpf.Map}{
+		{"monitored_pids",objects.MonitoredPIDs},
+		{"blocked_ipv4",objects.BlockedIPv4},
+		{"blocked_ipv6",objects.BlockedIPv6},
+		{"proxy_config",objects.ProxyConfig},
+		{"allowed_tcp",objects.AllowedTCP},
+	} {
+		if item.m == nil { return fmt.Errorf("missing guarded map %s",item.name) }
+		if err := item.m.Freeze(); err != nil { return fmt.Errorf("freeze guarded map %s: %w",item.name,err) }
+	}
+	return nil
+}
+
 func configureLinuxEnforcer(objects *linuxEnforcerObjects, config LinuxEnforcerConfig) error {
+	if config.TCPOnly {
+		if !config.ProtectAll || len(config.BlockedIPv4)>0 || len(config.BlockedIPv6)>0 || config.Proxy.Enabled!=0 {
+			return fmt.Errorf("invalid or conflicting TCP service policy")
+		}
+		for _, key := range config.AllowedTCP {
+			if err:=objects.AllowedTCP.Put(key,uint8(1));err!=nil{return fmt.Errorf("configure TCP endpoint: %w",err)}
+		}
+		return nil
+	}
 	for _, pid := range config.MonitoredPIDs {
 		value := uint8(1)
 		if err := objects.MonitoredPIDs.Put(pid, value); err != nil {
