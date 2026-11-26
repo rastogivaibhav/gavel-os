@@ -86,7 +86,7 @@ func attachPinnedGuardedEnforcer(cgroup string, config LinuxEnforcerConfig) (str
 			return "", err
 		}
 	}
-	objects, err := loadLinuxEnforcerObjects(true)
+	objects, err := loadLinuxEnforcerObjects(true, config.TCPOnly)
 	if err != nil {
 		return "", fmt.Errorf("load protected network kernel programs: %w", err)
 	}

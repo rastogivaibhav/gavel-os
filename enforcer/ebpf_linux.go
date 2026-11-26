@@ -16,6 +16,7 @@ type linuxEnforcerObjects struct {
 	BlockedIPv4          *ebpf.Map
 	BlockedIPv6          *ebpf.Map
 	ProxyConfig          *ebpf.Map
+	AllowedTCP           *ebpf.Map
 	GavelRedirectHandler *ebpf.Program
 	GavelIPv6Handler     *ebpf.Program
 	GavelUDP4Handler     *ebpf.Program
@@ -81,7 +82,7 @@ func (objects *linuxEnforcerObjects) networkHooks() []networkHook {
 	}
 }
 
-func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
+func loadLinuxEnforcerObjects(protectAll bool, tcpOnly ...bool) (*linuxEnforcerObjects, error) {
 	spec := &ebpf.CollectionSpec{
 		Maps: map[string]*ebpf.MapSpec{
 			"monitored_pids": {
@@ -102,6 +103,7 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 				ValueSize:  1,
 				MaxEntries: 1024,
 			},
+			"allowed_tcp": {Type: ebpf.Hash, KeySize: 20, ValueSize: 1, MaxEntries: 1024},
 			"proxy_config": {
 				Type:       ebpf.Array,
 				KeySize:    4,
@@ -141,6 +143,14 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 		},
 	}
 
+	if len(tcpOnly) > 0 && tcpOnly[0] {
+		if !protectAll { return nil, fmt.Errorf("TCP service profile requires guarded cgroup") }
+		spec.Programs["gavel_redirect_handler"].Instructions = buildTCPServiceInstructions(false)
+		spec.Programs["gavel_ipv6_handler"].Instructions = buildTCPServiceInstructions(true)
+		for _, name := range []string{"gavel_udp4_handler", "gavel_udp6_handler"} {
+			spec.Programs[name].Instructions = asm.Instructions{asm.Mov.Imm(asm.R0, 0), asm.Return()}
+		}
+	}
 	collection, err := ebpf.NewCollection(spec)
 	if err != nil {
 		return nil, fmt.Errorf("load linux enforcer collection: %w", err)
@@ -151,6 +161,7 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 		BlockedIPv4:          collection.Maps["blocked_ipv4"],
 		BlockedIPv6:          collection.Maps["blocked_ipv6"],
 		ProxyConfig:          collection.Maps["proxy_config"],
+		AllowedTCP:           collection.Maps["allowed_tcp"],
 		GavelRedirectHandler: collection.Programs["gavel_redirect_handler"],
 		GavelIPv6Handler:     collection.Programs["gavel_ipv6_handler"],
 		GavelUDP4Handler:     collection.Programs["gavel_udp4_handler"],
@@ -166,6 +177,7 @@ func loadLinuxEnforcerObjects(protectAll bool) (*linuxEnforcerObjects, error) {
 }
 
 func (objects *linuxEnforcerObjects) Close() error {
+	if objects.AllowedTCP != nil { _ = objects.AllowedTCP.Close() }
 	if objects.GavelUDP6Handler != nil {
 		_ = objects.GavelUDP6Handler.Close()
 	}
@@ -194,6 +206,15 @@ func (objects *linuxEnforcerObjects) Close() error {
 }
 
 func configureLinuxEnforcer(objects *linuxEnforcerObjects, config LinuxEnforcerConfig) error {
+	if config.TCPOnly {
+		if !config.ProtectAll || len(config.BlockedIPv4)>0 || len(config.BlockedIPv6)>0 || config.Proxy.Enabled!=0 {
+			return fmt.Errorf("invalid or conflicting TCP service policy")
+		}
+		for _, key := range config.AllowedTCP {
+			if err:=objects.AllowedTCP.Put(key,uint8(1));err!=nil{return fmt.Errorf("configure TCP endpoint: %w",err)}
+		}
+		return nil
+	}
 	for _, pid := range config.MonitoredPIDs {
 		value := uint8(1)
 		if err := objects.MonitoredPIDs.Put(pid, value); err != nil {
