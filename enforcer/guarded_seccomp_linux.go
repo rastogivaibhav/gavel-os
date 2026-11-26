@@ -56,7 +56,7 @@ func guardedSeccompProgram() ([]unix.SockFilter, error) {
 		unix.SYS_INIT_MODULE, unix.SYS_FINIT_MODULE, unix.SYS_DELETE_MODULE,
 		unix.SYS_KEXEC_LOAD, unix.SYS_REBOOT, unix.SYS_SWAPON, unix.SYS_SWAPOFF,
 		unix.SYS_PTRACE, unix.SYS_PROCESS_VM_WRITEV, unix.SYS_IO_URING_SETUP,
-		unix.SYS_PIDFD_GETFD,
+		unix.SYS_PIDFD_GETFD, unix.SYS_PROCESS_VM_READV,
 	} {
 		p = append(p, ins(scEqual, nr, 0, 1), ins(scReturn, deny, 0, 0))
 	}

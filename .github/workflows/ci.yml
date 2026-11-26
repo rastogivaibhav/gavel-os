@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main", "master"]
   pull_request:
-    branches: ["main", "master", "feat/linux-ipv6-connect6-20261124", "feat/guarded-identity-hardening-20261124", "feat/guarded-landlock-filesystem-20261124", "feat/p0-resource-isolation"]
+    branches: ["main", "master", "feat/linux-ipv6-connect6-20261124", "feat/guarded-identity-hardening-20261124", "feat/guarded-landlock-filesystem-20261124", "feat/p0-resource-isolation", "feat/p0-network-mediation"]
 
 jobs:
   # ── Go enforcer tests ────────────────────────────────────────────────────────
@@ -171,7 +171,7 @@ jobs:
   # Never run arbitrary fork-contributed code with elevated kernel privileges.
   kernel-denial-proof:
     name: Kernel IPv4 Denial (ephemeral VM)
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (github.head_ref == 'feat/linux-ipv6-connect6-20261124' || github.head_ref == 'feat/linux-udp-sendmsg-20261124' || github.head_ref == 'feat/guarded-identity-hardening-20261124' || github.head_ref == 'feat/guarded-landlock-filesystem-20261124' || github.head_ref == 'feat/p0-resource-isolation' || github.head_ref == 'feat/p0-unix-ipc-isolation') }}
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (github.head_ref == 'feat/linux-ipv6-connect6-20261124' || github.head_ref == 'feat/linux-udp-sendmsg-20261124' || github.head_ref == 'feat/guarded-identity-hardening-20261124' || github.head_ref == 'feat/guarded-landlock-filesystem-20261124' || github.head_ref == 'feat/p0-resource-isolation' || github.head_ref == 'feat/p0-unix-ipc-isolation' || github.head_ref == 'feat/p0-network-mediation' || github.head_ref == 'feat/p0-helper-identity') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -226,19 +226,31 @@ jobs:
             -test.run '^TestKernelGuarded(Containment|RejectsDelegatedCgroup)$' -test.v -test.timeout=55s
 
       - name: Assert real guarded Landlock filesystem enforcement
-        if: ${{ github.head_ref == 'feat/guarded-landlock-filesystem-20261124' || github.head_ref == 'feat/p0-resource-isolation' || github.head_ref == 'feat/p0-unix-ipc-isolation' }}
+        if: ${{ github.head_ref == 'feat/guarded-landlock-filesystem-20261124' || github.head_ref == 'feat/p0-resource-isolation' || github.head_ref == 'feat/p0-unix-ipc-isolation' || github.head_ref == 'feat/p0-network-mediation' || github.head_ref == 'feat/p0-helper-identity' }}
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
             -test.run '^TestKernelGuardedFilesystem$' -test.v -test.timeout=55s
 
       - name: Assert guarded inherited resource isolation
-        if: ${{ github.head_ref == 'feat/p0-resource-isolation' || github.head_ref == 'feat/p0-unix-ipc-isolation' }}
+        if: ${{ github.head_ref == 'feat/p0-resource-isolation' || github.head_ref == 'feat/p0-unix-ipc-isolation' || github.head_ref == 'feat/p0-network-mediation' || github.head_ref == 'feat/p0-helper-identity' }}
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
             -test.run '^TestKernelGuardedDescriptors$' -test.v -test.timeout=55s
 
       - name: Assert guarded external Unix IPC isolation
-        if: ${{ github.head_ref == 'feat/p0-unix-ipc-isolation' }}
+        if: ${{ github.head_ref == 'feat/p0-unix-ipc-isolation' || github.head_ref == 'feat/p0-network-mediation' || github.head_ref == 'feat/p0-helper-identity' }}
         run: |
           sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
             -test.run '^TestKernelGuardedUnixIPC$' -test.v -test.timeout=55s
+
+      - name: Assert mapped IPv6 and connected UDP destination enforcement
+        if: ${{ github.head_ref == 'feat/p0-network-mediation' || github.head_ref == 'feat/p0-helper-identity' }}
+        run: |
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 75s /tmp/gavel-kernel.test \
+            -test.run '^TestKernelGuardedNetworkMediation$' -test.v -test.timeout=70s
+
+      - name: Assert exclusive guarded UID and helper boundary
+        if: ${{ github.head_ref == 'feat/p0-helper-identity' }}
+        run: |
+          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
+            -test.run '^TestKernelGuardedHelperIdentity$' -test.v -test.timeout=55s

@@ -21,7 +21,7 @@ func checkGuardedSyscallPolicy(t *testing.T) {
 	t.Helper()
 	for _, nr := range []uintptr{
 		unix.SYS_UNSHARE, unix.SYS_SETNS, unix.SYS_BPF,
-		unix.SYS_PERF_EVENT_OPEN, unix.SYS_MOUNT, unix.SYS_IO_URING_SETUP, unix.SYS_PIDFD_GETFD,
+		unix.SYS_PERF_EVENT_OPEN, unix.SYS_MOUNT, unix.SYS_IO_URING_SETUP, unix.SYS_PIDFD_GETFD, unix.SYS_PROCESS_VM_READV,
 	} {
 		_, _, errno := unix.RawSyscall6(nr, 0, 0, 0, 0, 0, 0)
 		if errno != unix.EPERM {
