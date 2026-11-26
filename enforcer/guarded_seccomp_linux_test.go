@@ -21,7 +21,7 @@ func checkGuardedSyscallPolicy(t *testing.T) {
 	t.Helper()
 	for _, nr := range []uintptr{
 		unix.SYS_UNSHARE, unix.SYS_SETNS, unix.SYS_BPF,
-		unix.SYS_PERF_EVENT_OPEN, unix.SYS_MOUNT, unix.SYS_IO_URING_SETUP,
+		unix.SYS_PERF_EVENT_OPEN, unix.SYS_MOUNT, unix.SYS_IO_URING_SETUP, unix.SYS_PIDFD_GETFD,
 	} {
 		_, _, errno := unix.RawSyscall6(nr, 0, 0, 0, 0, 0, 0)
 		if errno != unix.EPERM {
@@ -45,18 +45,21 @@ func checkGuardedSyscallPolicy(t *testing.T) {
 		{unix.AF_INET, unix.SOCK_RAW, unix.IPPROTO_ICMP},
 		{unix.AF_INET6, unix.SOCK_RAW, unix.IPPROTO_ICMPV6},
 		{unix.AF_NETLINK, unix.SOCK_RAW, 0},
+		{unix.AF_UNIX, unix.SOCK_STREAM, 0},
+		{unix.AF_UNIX, unix.SOCK_DGRAM, 0},
 	} {
 		fd, err := unix.Socket(c.family, c.kind, c.protocol)
 		if fd >= 0 { unix.Close(fd) }
 		if !errors.Is(err, unix.EPERM) { t.Fatalf("socket policy %+v: %v", c, err) }
 	}
 	if err := exec.Command("/bin/true").Run(); err != nil { t.Fatalf("ordinary descendant execution: %v", err) }
-	for _, family := range []int{unix.AF_INET, unix.AF_INET6, unix.AF_UNIX} {
+	for _, family := range []int{unix.AF_INET, unix.AF_INET6} {
 		fd, err := unix.Socket(family, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 		if err != nil { t.Fatalf("allowed socket %d: %v", family, err) }
 		unix.Close(fd)
 	}
-	t.Log("KERNEL PROOF: restricted syscalls and socket families denied; ordinary sockets permitted")
+	checkPrivateIPC(t)
+	t.Log("KERNEL PROOF: restricted syscalls and socket families denied; ordinary IP sockets and private stream pairs permitted")
 }
 
 func TestGuardedSeccompProbe(t *testing.T) {
