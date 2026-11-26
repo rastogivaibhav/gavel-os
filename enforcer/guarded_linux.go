@@ -76,6 +76,15 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	if err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: cannot create dedicated child cgroup: %w", err)
 	}
+	// Serialize startup, execution and teardown against independent recovery.
+	// Hold this lease until AFTER the deferred pin/cgroup cleanup. If recovery
+	// acquired it in the interval after mkdir, do not race its cleanup.
+	lifecycle, err := acquireGuardedLifecycleLease(filepath.Base(cg))
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: guarded lifecycle lease for empty cgroup %s: %w", cg, err)
+	}
+	defer lifecycle.Close()
+
 	// The BPF link is pinned *before* the unprivileged child is launched.
 	// A Go defer cannot execute under SIGKILL; the persisted bpffs link
 	// continues to mediate this cgroup when this supervisor dies.

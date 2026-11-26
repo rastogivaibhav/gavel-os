@@ -225,6 +225,20 @@ func TestKernelSupervisorSIGKILLRetainsBPF(t *testing.T) {
 	}
 	t.Logf("pre-crash: protected descendant pid=%d pinned IPv4 link=%s and IPv6 link=%s", pid, pin, pin6)
 
+	// Recovery must not stop or unpin a live supervisor's workload.
+	if err := recoverGuardedAgent(cgroupName); err == nil || !strings.Contains(err.Error(), "lifecycle lease") {
+		t.Fatalf("live supervisor recovery must be refused: %v", err)
+	}
+	if err := syscallKillZero(pid); err != nil {
+		t.Fatalf("live workload was stopped by refused recovery: %v", err)
+	}
+	for _, suffix := range guardedNetworkPinSuffixes {
+		l, err := link.LoadPinnedLink(pin+suffix,nil)
+		if err != nil { t.Fatalf("live recovery removed pin %s: %v",suffix,err) }
+		l.Close()
+	}
+	t.Log("KERNEL PROOF: live supervisor lease refused recovery, workload and all pins retained")
+
 	if err := supervisor.Process.Kill(); err != nil {
 		t.Fatal(err)
 	}
@@ -258,6 +272,15 @@ func TestKernelSupervisorSIGKILLRetainsBPF(t *testing.T) {
 	assertUDPReceivers(t, udp, 2)
 	t.Log("KERNEL PROOF: survivor received IPv4 AND IPv6 TCP and UDP EPERM/EACCES after supervisor SIGKILL")
 
+	// A competing recovery operator must also be refused while the lease
+	// is held, even after the original supervisor has exited.
+	recoveryLease, err := acquireGuardedLifecycleLease(cgroupName)
+	if err != nil { t.Fatalf("supervisor death did not release lifecycle lease: %v",err) }
+	if err := recoverGuardedAgent(cgroupName); err == nil || !strings.Contains(err.Error(),"lifecycle lease") {
+		recoveryLease.Close()
+		t.Fatalf("competing recovery must be refused: %v",err)
+	}
+	if err := recoveryLease.Close(); err != nil { t.Fatal(err) }
 	if err := recoverGuardedAgent(cgroupName); err != nil {
 		t.Fatalf("independent trusted recovery failed: %v", err)
 	}
