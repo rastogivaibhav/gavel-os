@@ -38,6 +38,13 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	if err != nil {
 		return err
 	}
+	// Refuse a concurrently used identity before any workload starts.
+	// Hold the lease for the complete supervisor lifetime, including cleanup.
+	lease, err := acquireGuardedUIDLease(uid)
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: dedicated agent identity: %w", err)
+	}
+	defer lease.Close()
 	fsArgs, err := guardedFilesystemArguments()
 	if err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: filesystem policy: %w", err)

@@ -6,8 +6,8 @@ Goal: under A0/A1 and a trusted host/supervisor, close indirect resource paths f
 | --- | --- | --- |
 | P0.1 | Ambient file/socket descriptors absent; stdin inert; output write-only pipe/null; positive controls and descendants | KERNEL_TESTED (run 45774704902) |
 | P0.2 | Unapproved Unix IPC and descriptor transfer denied, approved local use tested | KERNEL_TESTED (run 45778120888; external Unix socket scope) |
-| P0.3 | Mapped IPv6 and connected socket paths obey policy | IMPLEMENTED_UNVERIFIED (destination blocklist slice) |
-| P0.4 | Trusted helper channels constrained, exclusions explicit | OPEN |
+| P0.3 | Mapped IPv6 and connected socket paths obey policy | KERNEL_TESTED (run 45906222748; native/mapped TCP and connected/unconnected UDP slice) |
+| P0.4 | Trusted helper channels constrained, exclusions explicit | IMPLEMENTED_UNVERIFIED (exclusive UID slice) |
 | P0.5 | A0/A1 policy/map/link modification denied and actual enforcement persists | OPEN |
 
 Completion requires passing isolated privileged CI, observed effects, reviewed threat assumptions and independent reproduction; no host-root claim. Prioritize failures before another gate; no auto-merge.
@@ -21,3 +21,7 @@ Guarded seccomp refuses all newly created externally addressable AF_UNIX sockets
 ## P0.3 native and mapped destination blocklists
 
 Both connect6 and sendmsg6 check the IPv4 map for exact ::ffff:0:0/96 addresses in addition to the IPv6 map. Native IPv6 stays on its own exact-key policy. Guarded tests explicitly create AF_INET6 dual-stack sockets rather than relying on Go's family selection. Test native IPv4, native IPv6, mapped IPv4 TCP, connected UDP write, explicit sendto/sendmsg on both connected and unconnected UDP, positive unguarded receiver controls and guarded descendants. This is destination blocklist enforcement, not default deny, semantic API policy, proxy parity, UDP-Lite or exhaustive protocol coverage. Existing connected descriptors from outside the guard, trusted helpers, and dynamic policy updates/revocation are not covered. CI pending; no independent review.
+
+## P0.4 exclusive workload identity (first slice)
+
+Guarded startup obtains a root-only, nonblocking per-UID flock under /run/gavel-guarded-uids and scans the host-visible procfs task credential records (real/effective/saved/filesystem UID) before allowing the workload to launch. Any observed matching UID, inaccessible credential record other than a vanished task, or invalid procfs/lease directory is a launch error. The lease remains held through cleanup; an orphan visible after supervisor SIGKILL is detected by the next scan. Never unlink lock files (inode replacement would permit simultaneous holders). process_vm_readv now explicitly denied alongside process_vm_writev, ptrace and pidfd_getfd. This is conservative admission control, not a kernel-enforced UID reservation: trusted host must dedicate the UID to this workload, prohibit other services/login or external launch using it, and expose the full host PID namespace/procfs. A scan cannot atomically prove absence under arbitrary concurrent external process creation or PID churn. Existing output consumers, permitted network helpers, shared GID permissions, filesystem aliases and non-socket IPC are not addressed. Dedicated UID must not be a shared account. CI pending; independent validation pending.

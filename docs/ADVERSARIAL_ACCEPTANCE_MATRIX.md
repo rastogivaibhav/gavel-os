@@ -110,3 +110,7 @@ PR #16: [run 45774704902](https://github.com/rastogivaibhav/gavel-os/actions/run
 ## P0.3 mapped address and connected UDP slice
 
 PRs #14–#17 merged to master at 73043be9d052bb679b48b5db8cc2bddb2abefcf8, tree identical to tested #17 (run 45778120888). P0.2 external Unix pathname and abstract service denial and private stream pairs KERNEL_TESTED. P0.3 adds explicit IPv4-mapped checks to connect6/sendmsg6 and native/mapped TCP and UDP kernel controls including connected UDP and destination overrides. T03/T04 remain scoped, new proof pending. No claims of exhaustive network mediation or proxy equivalence.
+
+## P0.4 helper identity slice
+
+PR #18 [run 45906222748](https://github.com/rastogivaibhav/gavel-os/actions/runs/45906222748) passed six jobs including mapped and connected UDP receiver evidence. P0.4 adds exclusive UID lease and process credential admission checks, plus process_vm_readv seccomp denial. Tests require a same-UID external helper to prevent startup, concurrent lease refusal, release after helper exit, and positive guarded launch. Host must exclusively assign the UID; process scanning is not an atomic security boundary against concurrent external launch. No claim that all helper channels are closed. New CI pending.
