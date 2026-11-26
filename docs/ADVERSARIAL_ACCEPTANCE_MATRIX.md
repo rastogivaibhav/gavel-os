@@ -118,3 +118,7 @@ PR #18 [run 45906222748](https://github.com/rastogivaibhav/gavel-os/actions/runs
 ## P0.4 system IPC slice
 
 PR #19 [run 45907820954](https://github.com/rastogivaibhav/gavel-os/actions/runs/45907820954) passed all six jobs including exclusive UID/helper admission. PRs #18/#19 merged, master tree identical to #19. System V shared memory/message queues/semaphores and POSIX message queue syscalls now denied by guarded seccomp. Real fixture tests require unguarded positive controls, guarded parent and descendants receiving EPERM, unchanged host objects, and allowed private memory/pipes. New evidence pending. POSIX shared memory files and other filesystem/IPC/helper paths remain unresolved; no broad helper protection claim.
+
+## P0.4 isolated filesystem profile
+
+An explicit isolated filesystem profile requires a valid Landlock policy and rejects rules covering known host IPC and kernel pseudo-filesystem roots and their ancestors (including resolved symlinks). The legacy guarded launch remains opt-in for filesystem policy. Added isolated real fixture proof for file-backed shared memory and a named FIFO outside the allowlist, plus private workspace mmap and descendant controls. No kernel evidence yet; PR #20 System V/POSIX queue proof remains pending. Trusted mount layout and private workspace required; aliases, approved shared paths and network brokers are not closed.

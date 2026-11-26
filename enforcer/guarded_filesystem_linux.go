@@ -15,6 +15,20 @@ import (
 )
 
 const guardedFilesystemEnv = "GAVEL_AGENT_FS_POLICY"
+const guardedFilesystemProfileEnv = "GAVEL_AGENT_FS_PROFILE"
+
+// The isolated profile excludes host communication and kernel pseudo-filesystem
+// roots, including any ancestor rule that would grant access to them.
+// This is a path admission check, not detection of arbitrary bind mounts or
+// host-created hardlink aliases. The host mount layout must be trusted.
+func isolatedFilesystemPathAllowed(path string) bool {
+	for _, forbidden := range []string{"/dev/shm", "/dev/mqueue", "/proc", "/sys", "/run"} {
+		if path == "/" || path == forbidden || strings.HasPrefix(path, forbidden+"/") || strings.HasPrefix(forbidden, path+"/") {
+			return false
+		}
+	}
+	return true
+}
 const landlockHandledFS = "execute,write-file,read-file,read-dir,remove-dir,remove-file,make-char,make-dir,make-reg,make-sock,make-fifo,make-block,make-sym,refer,truncate"
 
 type guardedFilesystemPolicy struct {
@@ -26,6 +40,10 @@ type guardedFilesystemPolicy struct {
 // Compile the host-supplied allowlist. Paths must already exist; permissions
 // refer to resolved filesystem objects and directory subtrees, not glob patterns.
 func compileGuardedFilesystemPolicy(raw string) ([]string, error) {
+	return compileGuardedFilesystemPolicyForProfile(raw, false)
+}
+
+func compileGuardedFilesystemPolicyForProfile(raw string, isolated bool) ([]string, error) {
 	var policy guardedFilesystemPolicy
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.DisallowUnknownFields()
@@ -45,6 +63,9 @@ func compileGuardedFilesystemPolicy(raw string) ([]string, error) {
 			if err != nil { return nil, err }
 			if resolved == "/" || strings.ContainsAny(resolved, ":\n\r\x00") {
 				return nil, fmt.Errorf("invalid resolved path %q", resolved)
+			}
+			if isolated && (!isolatedFilesystemPathAllowed(path) || !isolatedFilesystemPathAllowed(resolved)) {
+				return nil, fmt.Errorf("isolated filesystem profile forbids host IPC or kernel path %q (resolved %q)", path, resolved)
 			}
 			info, err := os.Stat(resolved)
 			if err != nil { return nil, err }
@@ -94,9 +115,18 @@ func compileGuardedFilesystemPolicy(raw string) ([]string, error) {
 }
 
 func guardedFilesystemArguments() ([]string,error) {
+	profile := os.Getenv(guardedFilesystemProfileEnv)
+	if profile != "" && profile != "isolated" {
+		return nil, fmt.Errorf("unknown guarded filesystem profile %q", profile)
+	}
 	raw, configured := os.LookupEnv(guardedFilesystemEnv)
-	if !configured { return nil,nil }
-	args, err := compileGuardedFilesystemPolicy(raw)
+	if !configured {
+		if profile == "isolated" {
+			return nil, fmt.Errorf("isolated filesystem profile requires %s", guardedFilesystemEnv)
+		}
+		return nil, nil
+	}
+	args, err := compileGuardedFilesystemPolicyForProfile(raw, profile == "isolated")
 	if err != nil { return nil,err }
 	// ABI 3 introduced explicit truncate mediation. Never downgrade rights.
 	abi, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, 0, 0, 1)

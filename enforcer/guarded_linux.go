@@ -254,6 +254,7 @@ func guardedWorkloadEnvironment(env []string) []string {
 			strings.HasPrefix(entry, "NLSPATH=") ||
 			strings.HasPrefix(entry, "TZDIR=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_FS_POLICY=") ||
+			strings.HasPrefix(entry, "GAVEL_AGENT_FS_PROFILE=") ||
 			strings.HasPrefix(entry, "GAVEL_MACHINE_KEY=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_UID=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_GID=") ||
