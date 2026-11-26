@@ -122,3 +122,15 @@ PR #19 [run 45907820954](https://github.com/rastogivaibhav/gavel-os/actions/runs
 ## P0.4 isolated filesystem profile
 
 An explicit isolated filesystem profile requires a valid Landlock policy and rejects rules covering known host IPC and kernel pseudo-filesystem roots and their ancestors (including resolved symlinks). The legacy guarded launch remains opt-in for filesystem policy. Added isolated real fixture proof for file-backed shared memory and a named FIFO outside the allowlist, plus private workspace mmap and descendant controls. No kernel evidence yet; PR #20 System V/POSIX queue proof remains pending. Trusted mount layout and private workspace required; aliases, approved shared paths and network brokers are not closed.
+
+## P0.4 TCP service allowlist slice
+
+Opt-in guarded local profile requires explicit JSON literal IP:port list, rejects conflicting legacy/control-plane configuration, selects strict connect hooks with canonical IPv4-mapped/IPv6 address and exact port keys, deny-all UDP hooks, and TCP-only seccomp socket restrictions. Tests require permitted exact endpoints and denied other ports on the same IP, IPv4 mapped and native IPv6, descendants, empty list and no external traffic. No claim of application-layer helper authorization; CI pending.
+
+## P0.5 immutable guarded map slice
+
+PRs #20–#22 passed scoped privileged CI (45908105713, 45908274836, 45908961917). New P0.5 branch uses read-only-program map flags and mandatory map freeze before guarded attachment; trusted pin ancestry checked. Tests cover actual map update/delete negative controls and value preservation, unprivileged link tampering plus continued destination denial and cleanup. T09/T14 remain partial pending CI and additional configuration/recovery/independent evidence. Trusted host root can still replace or detach enforcement and is outside A0/A1.
+
+## P0.5 recovery lifecycle slice
+
+Frozen-map/pin proof passed [run 45909974360](https://github.com/rastogivaibhav/gavel-os/actions/runs/45909974360). This change makes recovery orphan-only by serializing the guarded supervisor lifecycle with independent recovery via an exclusive root-owned cgroup lease. Tests require live recovery refusal with all four pins retained, post-SIGKILL denial, concurrent recovery refusal, and successful empty-before-unpin cleanup. Evidence pending. No malicious root resistance or cross-mount lock guarantee. Policy provenance and independent review remain outstanding.

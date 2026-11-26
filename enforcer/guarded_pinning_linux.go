@@ -22,6 +22,9 @@ var guardedCgroupName = regexp.MustCompile(`^gavel-agent-[0-9]+$`)
 // The pinned link is deliberately owned by privileged host-side recovery,
 // rather than by the agent or the lifetime of the launching process.
 func prepareGuardedPinRoot() error {
+	if err := validateTrustedDirectoryChain("/sys/fs/bpf"); err != nil {
+		return fmt.Errorf("untrusted bpffs ancestor: %w",err)
+	}
 	var fs unix.Statfs_t
 	if err := unix.Statfs("/sys/fs/bpf", &fs); err != nil {
 		return fmt.Errorf("bpffs inaccessible: %w", err)
@@ -86,13 +89,16 @@ func attachPinnedGuardedEnforcer(cgroup string, config LinuxEnforcerConfig) (str
 			return "", err
 		}
 	}
-	objects, err := loadLinuxEnforcerObjects(true)
+	objects, err := loadLinuxEnforcerObjects(true, config.TCPOnly)
 	if err != nil {
 		return "", fmt.Errorf("load protected network kernel programs: %w", err)
 	}
 	defer objects.Close()
 	if err := configureLinuxEnforcer(objects, config); err != nil {
 		return "", err
+	}
+	if err := objects.freezeGuardedPolicy(); err != nil {
+		return "", fmt.Errorf("SECURITY BLOCKER: immutable guarded policy required: %w",err)
 	}
 	var pinned []link.Link
 	rollback := func(cause error) error {
@@ -155,6 +161,13 @@ func recoverGuardedAgent(name string) error {
 	if _, err := guardedPinPath(name); err != nil {
 		return err
 	}
+	// Recovery is an orphan-only operation, not a live supervisor stop API.
+	// Two recovery operators must not race each other or a live launch.
+	lifecycle, err := acquireGuardedLifecycleLease(name)
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: recovery lifecycle lease: %w", err)
+	}
+	defer lifecycle.Close()
 	if err := prepareGuardedPinRoot(); err != nil {
 		return err
 	}
