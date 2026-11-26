@@ -5,8 +5,8 @@ Goal: under A0/A1 and a trusted host/supervisor, close indirect resource paths f
 | Gate | Acceptance | Status |
 | --- | --- | --- |
 | P0.1 | Ambient file/socket descriptors absent; stdin inert; output write-only pipe/null; positive controls and descendants | KERNEL_TESTED (run 45774704902) |
-| P0.2 | Unapproved Unix IPC and descriptor transfer denied, approved local use tested | IMPLEMENTED_UNVERIFIED (strict socket policy slice) |
-| P0.3 | Mapped IPv6 and connected socket paths obey policy | OPEN |
+| P0.2 | Unapproved Unix IPC and descriptor transfer denied, approved local use tested | KERNEL_TESTED (run 45778120888; external Unix socket scope) |
+| P0.3 | Mapped IPv6 and connected socket paths obey policy | IMPLEMENTED_UNVERIFIED (destination blocklist slice) |
 | P0.4 | Trusted helper channels constrained, exclusions explicit | OPEN |
 | P0.5 | A0/A1 policy/map/link modification denied and actual enforcement persists | OPEN |
 
@@ -17,3 +17,7 @@ P0.1 deliberately uses close_range(CLOEXEC) in the dedicated trusted supervisor,
 ## P0.2 strict Unix socket boundary
 
 Guarded seccomp refuses all newly created externally addressable AF_UNIX sockets (pathname and abstract), while allowing AF_UNIX SOCK_STREAM socketpair for private same-domain communication. Datagram/seqpacket pairs and pidfd_getfd are denied. This intentionally breaks applications requiring D-Bus, Docker sockets, local Unix agents or other Unix services; there is no compatibility bypass. The change does not inspect ancillary data on approved private pairs: transfers of descriptors already held within the protected domain are allowed. Tests must show actual external synthetic descriptor receipt without the guard, kernel denial with the guard, no external server connections, allowed private stream communication and fork/exec inheritance. Same-UID /proc reopening, other IPC mechanisms, allowed TCP helper services, output-pipe consumers and privileged brokers remain separate gates. Requires P0.1's trusted launch descriptor boundary. Independent review pending.
+
+## P0.3 native and mapped destination blocklists
+
+Both connect6 and sendmsg6 check the IPv4 map for exact ::ffff:0:0/96 addresses in addition to the IPv6 map. Native IPv6 stays on its own exact-key policy. Guarded tests explicitly create AF_INET6 dual-stack sockets rather than relying on Go's family selection. Test native IPv4, native IPv6, mapped IPv4 TCP, connected UDP write, explicit sendto/sendmsg on both connected and unconnected UDP, positive unguarded receiver controls and guarded descendants. This is destination blocklist enforcement, not default deny, semantic API policy, proxy parity, UDP-Lite or exhaustive protocol coverage. Existing connected descriptors from outside the guard, trusted helpers, and dynamic policy updates/revocation are not covered. CI pending; no independent review.

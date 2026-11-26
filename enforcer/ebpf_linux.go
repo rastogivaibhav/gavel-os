@@ -280,7 +280,8 @@ func buildConnect4Instructions(protectAll bool) asm.Instructions {
 
 // buildConnect6Instructions enforces an exact 128-bit destination match
 // against bpf_sock_addr.user_ip6[4], whose four network-order words are
-// at context offsets 8, 12, 16, 20. Unlike IPv4, no proxy rewrite applies.
+// at context offsets 8, 12, 16, 20. IPv4-mapped addresses also consult the
+// IPv4 blocklist. Unlike IPv4, no proxy rewrite applies.
 func buildConnect6Instructions(protectAll bool) asm.Instructions {
 	const (
 		pidKeyOffset = -8
@@ -315,11 +316,30 @@ func buildConnect6Instructions(protectAll bool) asm.Instructions {
 		asm.Add.Imm(asm.R2, ipKeyOffset),
 		asm.LoadMapPtr(asm.R1, 0).WithReference("blocked_ipv6"),
 		asm.FnMapLookupElem.Call(),
+		asm.JEq.Imm(asm.R0, 0, "check_mapped_ipv4"),
+		asm.LoadMem(asm.R1, asm.R0, 0, asm.Byte),
+		asm.JEq.Imm(asm.R1, 0, "check_mapped_ipv4"),
+		asm.Mov.Imm(asm.R0, 0).WithSymbol("deny_ipv6"),
+		asm.Return(),
+
+		// Only ::ffff:0:0/96 is IPv4-mapped. Read the already initialized
+		// stack key rather than relying on narrow context accesses.
+		asm.LoadMem(asm.R1, asm.RFP, ipKeyOffset, asm.Word).WithSymbol("check_mapped_ipv4"),
+		asm.JNE.Imm(asm.R1, 0, "allow_ipv6"),
+		asm.LoadMem(asm.R1, asm.RFP, ipKeyOffset+4, asm.Word),
+		asm.JNE.Imm(asm.R1, 0, "allow_ipv6"),
+		asm.LoadMem(asm.R1, asm.RFP, ipKeyOffset+8, asm.Word),
+		asm.HostTo(asm.BE, asm.R1, asm.Word),
+		asm.JNE.Imm(asm.R1, 0xffff, "allow_ipv6"),
+		// The final four bytes are already in the same network-byte layout
+		// as the native IPv4 key. No byte swap for the map lookup.
+		asm.Mov.Reg(asm.R2, asm.RFP),
+		asm.Add.Imm(asm.R2, ipKeyOffset+12),
+		asm.LoadMapPtr(asm.R1, 0).WithReference("blocked_ipv4"),
+		asm.FnMapLookupElem.Call(),
 		asm.JEq.Imm(asm.R0, 0, "allow_ipv6"),
 		asm.LoadMem(asm.R1, asm.R0, 0, asm.Byte),
-		asm.JEq.Imm(asm.R1, 0, "allow_ipv6"),
-		asm.Mov.Imm(asm.R0, 0),
-		asm.Return(),
+		asm.JNE.Imm(asm.R1, 0, "deny_ipv6"),
 		asm.Mov.Imm(asm.R0, 1).WithSymbol("allow_ipv6"),
 		asm.Return(),
 	)

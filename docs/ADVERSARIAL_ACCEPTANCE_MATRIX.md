@@ -106,3 +106,7 @@ PR #15 corrected run [45587216225](https://github.com/rastogivaibhav/gavel-os/ac
 ## P0 inherited resources and Unix IPC
 
 PR #16: [run 45774704902](https://github.com/rastogivaibhav/gavel-os/actions/runs/45774704902) passed six jobs including guarded inherited descriptor isolation. T05–T07 scoped Landlock proof passed in [run 45587216225](https://github.com/rastogivaibhav/gavel-os/actions/runs/45587216225). PRs #14–#16 remain unmerged. P0.2 adds strict Unix socket creation restrictions, private stream pairs only, and pidfd_getfd denial. New tests require negative and positive local IPC controls and descendants. No new evidence claim until CI completes; does not close trusted helper or general descriptor transfer via other paths.
+
+## P0.3 mapped address and connected UDP slice
+
+PRs #14–#17 merged to master at 73043be9d052bb679b48b5db8cc2bddb2abefcf8, tree identical to tested #17 (run 45778120888). P0.2 external Unix pathname and abstract service denial and private stream pairs KERNEL_TESTED. P0.3 adds explicit IPv4-mapped checks to connect6/sendmsg6 and native/mapped TCP and UDP kernel controls including connected UDP and destination overrides. T03/T04 remain scoped, new proof pending. No claims of exhaustive network mediation or proxy equivalence.
