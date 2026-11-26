@@ -161,6 +161,13 @@ func recoverGuardedAgent(name string) error {
 	if _, err := guardedPinPath(name); err != nil {
 		return err
 	}
+	// Recovery is an orphan-only operation, not a live supervisor stop API.
+	// Two recovery operators must not race each other or a live launch.
+	lifecycle, err := acquireGuardedLifecycleLease(name)
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: recovery lifecycle lease: %w", err)
+	}
+	defer lifecycle.Close()
 	if err := prepareGuardedPinRoot(); err != nil {
 		return err
 	}

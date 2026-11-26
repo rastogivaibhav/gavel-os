@@ -130,3 +130,7 @@ Opt-in guarded local profile requires explicit JSON literal IP:port list, reject
 ## P0.5 immutable guarded map slice
 
 PRs #20–#22 passed scoped privileged CI (45908105713, 45908274836, 45908961917). New P0.5 branch uses read-only-program map flags and mandatory map freeze before guarded attachment; trusted pin ancestry checked. Tests cover actual map update/delete negative controls and value preservation, unprivileged link tampering plus continued destination denial and cleanup. T09/T14 remain partial pending CI and additional configuration/recovery/independent evidence. Trusted host root can still replace or detach enforcement and is outside A0/A1.
+
+## P0.5 recovery lifecycle slice
+
+Frozen-map/pin proof passed [run 45909974360](https://github.com/rastogivaibhav/gavel-os/actions/runs/45909974360). This change makes recovery orphan-only by serializing the guarded supervisor lifecycle with independent recovery via an exclusive root-owned cgroup lease. Tests require live recovery refusal with all four pins retained, post-SIGKILL denial, concurrent recovery refusal, and successful empty-before-unpin cleanup. Evidence pending. No malicious root resistance or cross-mount lock guarantee. Policy provenance and independent review remain outstanding.
