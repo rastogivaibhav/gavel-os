@@ -39,6 +39,9 @@ type LinuxEnforcerConfig struct {
 	// ProtectAll enforces the policy for ALL tasks in the attached cgroup,
 	// including fork/exec descendants. Only enable on a dedicated child cgroup.
 	ProtectAll    bool
+	// TCPOnly is a guarded local-only default-deny profile.
+	TCPOnly bool
+	AllowedTCP [][20]byte
 }
 
 func linuxPolicySource(machineKey string) string {
@@ -167,6 +170,7 @@ func loadLinuxEnforcerConfigFromEnv() (LinuxEnforcerConfig, error) {
 }
 
 func linuxPolicyConfigured(config LinuxEnforcerConfig) bool {
+	if config.TCPOnly { return config.ProtectAll }
 	return (config.ProtectAll || len(config.MonitoredPIDs) > 0) && (len(config.BlockedIPv4) > 0 || len(config.BlockedIPv6) > 0 || config.Proxy.Enabled == 1)
 }
 

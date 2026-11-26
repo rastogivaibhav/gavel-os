@@ -64,6 +64,7 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	// Every task in this dedicated cgroup, including descendants, is in-scope.
 	config.MonitoredPIDs = nil
 	config.ProtectAll = true
+	if err := configureGuardedTCPProfile(&config); err != nil { return fmt.Errorf("SECURITY BLOCKER: TCP service profile: %w", err) }
 	if !linuxPolicyConfigured(config) {
 		return fmt.Errorf("SECURITY BLOCKER: guarded workload requires a block or redirect policy")
 	}
@@ -75,6 +76,15 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	if err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: cannot create dedicated child cgroup: %w", err)
 	}
+	// Serialize startup, execution and teardown against independent recovery.
+	// Hold this lease until AFTER the deferred pin/cgroup cleanup. If recovery
+	// acquired it in the interval after mkdir, do not race its cleanup.
+	lifecycle, err := acquireGuardedLifecycleLease(filepath.Base(cg))
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: guarded lifecycle lease for empty cgroup %s: %w", cg, err)
+	}
+	defer lifecycle.Close()
+
 	// The BPF link is pinned *before* the unprivileged child is launched.
 	// A Go defer cannot execute under SIGKILL; the persisted bpffs link
 	// continues to mediate this cgroup when this supervisor dies.
@@ -143,7 +153,7 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	if err := validateTrustedDirectoryChain(filepath.Dir(launcher)); err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: untrusted setpriv parent: %w", err)
 	}
-	filter, err := guardedSeccompFile()
+	filter, err := guardedSeccompFile(config.TCPOnly)
 	if err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: cannot prepare syscall policy: %w", err)
 	}
@@ -254,6 +264,9 @@ func guardedWorkloadEnvironment(env []string) []string {
 			strings.HasPrefix(entry, "NLSPATH=") ||
 			strings.HasPrefix(entry, "TZDIR=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_FS_POLICY=") ||
+			strings.HasPrefix(entry, "GAVEL_AGENT_FS_PROFILE=") ||
+			strings.HasPrefix(entry, "GAVEL_AGENT_NET_PROFILE=") ||
+			strings.HasPrefix(entry, "GAVEL_AGENT_TCP_ALLOW=") ||
 			strings.HasPrefix(entry, "GAVEL_MACHINE_KEY=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_UID=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_GID=") ||
