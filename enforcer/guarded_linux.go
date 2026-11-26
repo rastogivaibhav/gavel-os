@@ -156,7 +156,9 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	cmd := exec.Command(launcher, args...)
 	// FD 3 contains only the immutable public filter, never a privileged socket.
 	cmd.ExtraFiles = []*os.File{filter}
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := configureGuardedDescriptors(cmd); err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: descriptor isolation: %w", err)
+	}
 	cmd.Env = guardedWorkloadEnvironment(os.Environ())
 	// Atomic cgroup assignment at process creation eliminates the interval
 	// between fork and userspace moving the process into a cgroup.
@@ -165,6 +167,11 @@ func runGuardedAgent(argv []string) (resultErr error) {
 		UseCgroupFD: true,
 		CgroupFD: int(cgfd.Fd()),
 		Pdeathsig: syscall.SIGKILL,
+	}
+	// Mark all ambient non-stdio descriptors close-on-exec. os/exec
+	// deliberately remaps only the sealed filter from ExtraFiles to FD 3.
+	if err := sealAmbientDescriptors(); err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: descriptor isolation unavailable: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: protected process could not be spawned inside cgroup: %w", err)

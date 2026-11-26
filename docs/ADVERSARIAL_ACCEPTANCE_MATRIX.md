@@ -98,3 +98,7 @@ Stacked Landlock branch introduces opt-in host-supplied JSON read/write/execute 
 
 ## Verification reconciliation — 2026-11-25
 PR #14 run 45511474402 passed all six jobs, including scoped seccomp and delegated-cgroup tests; draft remains unmerged. PR #15 run 45511559775 passed five jobs but failed privileged filesystem positive control at /dev/null open, before forbidden file/exec assertions. Corrected probe streams and executable path; no additional policy rights granted. T05–T07 remain IMPLEMENTED_UNVERIFIED pending rerun.
+
+## Filesystem verification and P0 descriptor gate
+
+PR #15 corrected run [45587216225](https://github.com/rastogivaibhav/gavel-os/actions/runs/45587216225) passed all six jobs including guarded Landlock proof; T05–T07 KERNEL_TESTED for the documented opt-in scope. PR #14 and #15 still draft. P0.1 adds close-on-exec ambient FD handling and strict standard streams in guarded mode; new privileged tests verify synthetic inaccessible file/socket positive controls and absence of those resources in agent/descendants. IMPLEMENTED_UNVERIFIED until CI. See P0_RESOURCE_ISOLATION_GOAL.md for acceptance and remaining gates.
