@@ -9,6 +9,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
+	"golang.org/x/sys/unix"
 )
 
 type linuxEnforcerObjects struct {
@@ -44,6 +45,12 @@ func attachEnforcer(cgroupPath string, config LinuxEnforcerConfig) (func(), erro
 		return func() {}, err
 	}
 
+	if config.ProtectAll {
+		if err := objects.freezeGuardedPolicy(); err != nil {
+			_ = objects.Close()
+			return func(){}, err
+		}
+	}
 	var attached []link.Link
 	for _, hook := range objects.networkHooks() {
 		l, err := link.AttachCgroup(link.CgroupOptions{
@@ -143,6 +150,14 @@ func loadLinuxEnforcerObjects(protectAll bool, tcpOnly ...bool) (*linuxEnforcerO
 		},
 	}
 
+	// Guarded policy is a per-launch immutable snapshot. Forbid writes by
+	// kernel programs as well as freezing userspace mutation after population.
+	// Legacy PID mode retains its existing behavior.
+	if protectAll {
+		for _, specMap := range spec.Maps {
+			specMap.Flags |= unix.BPF_F_RDONLY_PROG
+		}
+	}
 	if len(tcpOnly) > 0 && tcpOnly[0] {
 		if !protectAll { return nil, fmt.Errorf("TCP service profile requires guarded cgroup") }
 		spec.Programs["gavel_redirect_handler"].Instructions = buildTCPServiceInstructions(false)
@@ -201,6 +216,22 @@ func (objects *linuxEnforcerObjects) Close() error {
 	}
 	if objects.MonitoredPIDs != nil {
 		_ = objects.MonitoredPIDs.Close()
+	}
+	return nil
+}
+
+// Freeze all guarded policy maps, including currently unused maps, before
+// any attach. A failure leaves no running untrusted workload.
+func (objects *linuxEnforcerObjects) freezeGuardedPolicy() error {
+	for _, item := range []struct{name string; m *ebpf.Map}{
+		{"monitored_pids",objects.MonitoredPIDs},
+		{"blocked_ipv4",objects.BlockedIPv4},
+		{"blocked_ipv6",objects.BlockedIPv6},
+		{"proxy_config",objects.ProxyConfig},
+		{"allowed_tcp",objects.AllowedTCP},
+	} {
+		if item.m == nil { return fmt.Errorf("missing guarded map %s",item.name) }
+		if err := item.m.Freeze(); err != nil { return fmt.Errorf("freeze guarded map %s: %w",item.name,err) }
 	}
 	return nil
 }
