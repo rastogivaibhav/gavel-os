@@ -22,6 +22,9 @@ var guardedCgroupName = regexp.MustCompile(`^gavel-agent-[0-9]+$`)
 // The pinned link is deliberately owned by privileged host-side recovery,
 // rather than by the agent or the lifetime of the launching process.
 func prepareGuardedPinRoot() error {
+	if err := validateTrustedDirectoryChain("/sys/fs/bpf"); err != nil {
+		return fmt.Errorf("untrusted bpffs ancestor: %w",err)
+	}
 	var fs unix.Statfs_t
 	if err := unix.Statfs("/sys/fs/bpf", &fs); err != nil {
 		return fmt.Errorf("bpffs inaccessible: %w", err)
@@ -93,6 +96,9 @@ func attachPinnedGuardedEnforcer(cgroup string, config LinuxEnforcerConfig) (str
 	defer objects.Close()
 	if err := configureLinuxEnforcer(objects, config); err != nil {
 		return "", err
+	}
+	if err := objects.freezeGuardedPolicy(); err != nil {
+		return "", fmt.Errorf("SECURITY BLOCKER: immutable guarded policy required: %w",err)
 	}
 	var pinned []link.Link
 	rollback := func(cause error) error {

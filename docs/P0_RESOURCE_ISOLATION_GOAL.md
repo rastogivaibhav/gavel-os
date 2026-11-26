@@ -7,8 +7,8 @@ Goal: under A0/A1 and a trusted host/supervisor, close indirect resource paths f
 | P0.1 | Ambient file/socket descriptors absent; stdin inert; output write-only pipe/null; positive controls and descendants | KERNEL_TESTED (run 45774704902) |
 | P0.2 | Unapproved Unix IPC and descriptor transfer denied, approved local use tested | KERNEL_TESTED (run 45778120888; external Unix socket scope) |
 | P0.3 | Mapped IPv6 and connected socket paths obey policy | KERNEL_TESTED (run 45906222748; native/mapped TCP and connected/unconnected UDP slice) |
-| P0.4 | Trusted helper channels constrained, exclusions explicit | PARTIAL_KERNEL_TESTED (exclusive UID run 45907820954; system IPC implemented, verification pending) |
-| P0.5 | A0/A1 policy/map/link modification denied and actual enforcement persists | OPEN |
+| P0.4 | Trusted helper channels constrained, exclusions explicit | PARTIAL_KERNEL_TESTED (runs 45907820954, 45908105713, 45908274836, 45908961917; application-layer helper trust remains) |
+| P0.5 | A0/A1 policy/map/link modification denied and actual enforcement persists | IMPLEMENTED_UNVERIFIED (frozen map and pin slice) |
 
 Completion requires passing isolated privileged CI, observed effects, reviewed threat assumptions and independent reproduction; no host-root claim. Prioritize failures before another gate; no auto-merge.
 
@@ -37,3 +37,7 @@ Select GAVEL_AGENT_FS_PROFILE=isolated to require an explicit Landlock filesyste
 ## P0.4 default-deny TCP service profile (unverified)
 
 GAVEL_AGENT_NET_PROFILE=tcp-services selects an explicit local-only TCP endpoint allowlist from GAVEL_AGENT_TCP_ALLOW (JSON array of literal IP:port strings, [] means no outbound endpoints). Missing/malformed policy, unknown profile, control-plane mode, blocklist/redirect conflicts or map/attach errors refuse launch. All four hooks remain mandatory; connect4/connect6 use a canonical IPv6-shaped address plus network-order port key (IPv4 mapped), UDP hooks deny. Seccomp restricts new IP sockets to stream TCP, denies listen/accept and MSG_FASTOPEN sends. Private stream pairs remain. This is an opt-in destination-level authorization slice, not application-layer authorization: allowed endpoints must be trusted, no semantic or DNS identity assurance, proxy/tunnel or external network broker authorization is not supplied. No packet-level or exhaustive socket path claim; independent reproduction required. PR #20/#21 prerequisites still queued for privileged CI at implementation time.
+
+## P0.5 immutable active policy and pin directory integrity
+
+PRs #20/#21/#22 passed all six jobs in runs 45908105713, 45908274836 and 45908961917 respectively; remain unmerged. Guarded policy maps are BPF_F_RDONLY_PROG at creation and frozen via BPF_MAP_FREEZE after population and before attachment, including unused policy maps. Any freeze failure aborts before attach/payload. Guarded maps are per-launch immutable snapshots; policy change requires trusted stop and new launch. Legacy monitored-PID behavior unchanged. Pin root now validates trusted bpffs ancestry. Tests require successful pre-freeze changes and denied post-freeze update/delete using host handles, preserved map values, and guarded parent/descendant denied unlink or rename of their own links, denied recovery, positive/negative network controls and normal cleanup. No claim of root-resistant link integrity, signed configuration or audit integrity. New CI pending. Independent review still required.
