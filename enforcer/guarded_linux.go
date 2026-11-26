@@ -69,6 +69,17 @@ func runGuardedAgent(argv []string) (resultErr error) {
 		return fmt.Errorf("SECURITY BLOCKER: guarded workload requires a block or redirect policy")
 	}
 
+	filter, err := guardedSeccompFile(config.TCPOnly)
+	if err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: cannot prepare syscall policy: %w", err)
+	}
+	defer filter.Close()
+	digest, err := guardedPolicyDigest(config, uid, gid, preflight.PolicySource, fsArgs, filter)
+	if err != nil { return fmt.Errorf("SECURITY BLOCKER: policy digest: %w", err) }
+	if err := verifyGuardedPolicyDigest(digest); err != nil {
+		return fmt.Errorf("SECURITY BLOCKER: policy digest: %w", err)
+	}
+
 	if err := validateGuardedCgroup(preflight.CgroupPath); err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: untrusted cgroup parent: %w", err)
 	}
@@ -130,6 +141,7 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	}
 	pinned = true
 	log.Printf("persistent protected kernel link pinned at %s", pin)
+	log.Printf("guarded_policy_snapshot schema=%s digest=%s cgroup=%s uid=%d gid=%d source=%s", guardedPolicySchema, digest, cg, uid, gid, preflight.PolicySource)
 
 	cgfd, err := os.Open(cg)
 	if err != nil {
@@ -153,11 +165,6 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	if err := validateTrustedDirectoryChain(filepath.Dir(launcher)); err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: untrusted setpriv parent: %w", err)
 	}
-	filter, err := guardedSeccompFile(config.TCPOnly)
-	if err != nil {
-		return fmt.Errorf("SECURITY BLOCKER: cannot prepare syscall policy: %w", err)
-	}
-	defer filter.Close()
 	args := append([]string{
 		"--no-new-privs", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all",
 		"--reuid="+strconv.FormatUint(uint64(uid), 10), "--regid="+strconv.FormatUint(uint64(gid), 10),
@@ -267,6 +274,7 @@ func guardedWorkloadEnvironment(env []string) []string {
 			strings.HasPrefix(entry, "GAVEL_AGENT_FS_PROFILE=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_NET_PROFILE=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_TCP_ALLOW=") ||
+			strings.HasPrefix(entry, "GAVEL_AGENT_EXPECTED_POLICY_DIGEST=") ||
 			strings.HasPrefix(entry, "GAVEL_MACHINE_KEY=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_UID=") ||
 			strings.HasPrefix(entry, "GAVEL_AGENT_GID=") ||

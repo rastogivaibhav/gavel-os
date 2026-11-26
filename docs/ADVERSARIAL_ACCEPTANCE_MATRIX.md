@@ -1,6 +1,6 @@
 # GavelOS — Adversarial OS-operation acceptance matrix
 
-**Baseline date:** 2026-11-23. Status is evidence-gated. One explicitly scoped kernel proof (T01/T10) passed in [GitHub Actions run 45285372144](https://github.com/rastogivaibhav/gavel-os/actions/runs/45285372144); all other tests remain unproven unless separately recorded.
+**Baseline date:** 2026-11-23. **Current evidence summary:** see the consolidated table below; historical entries retain their original status at time of recording. Status is evidence-gated. One explicitly scoped kernel proof (T01/T10) passed in [GitHub Actions run 45285372144](https://github.com/rastogivaibhav/gavel-os/actions/runs/45285372144); all other tests remain unproven unless separately recorded.
 
 **State vocabulary:** NOT_IMPLEMENTED / IMPLEMENTED_UNVERIFIED / KERNEL_TESTED / ADVERSARIAL_TESTED / INDEPENDENTLY_VERIFIED. `PASS` requires evidence (kernel status, test log, version/ref). `DENY` in a control-plane log without blocked OS action is not PASS.
 
@@ -134,3 +134,23 @@ PRs #20–#22 passed scoped privileged CI (45908105713, 45908274836, 45908961917
 ## P0.5 recovery lifecycle slice
 
 Frozen-map/pin proof passed [run 45909974360](https://github.com/rastogivaibhav/gavel-os/actions/runs/45909974360). This change makes recovery orphan-only by serializing the guarded supervisor lifecycle with independent recovery via an exclusive root-owned cgroup lease. Tests require live recovery refusal with all four pins retained, post-SIGKILL denial, concurrent recovery refusal, and successful empty-before-unpin cleanup. Evidence pending. No malicious root resistance or cross-mount lock guarantee. Policy provenance and independent review remain outstanding.
+
+## Consolidated evidence — master 451c314 (2026-11-26)
+
+Latest full merged-tree equivalent CI: [45910987476](https://github.com/rastogivaibhav/gavel-os/actions/runs/45910987476), tested SHA 3a0451185a3a50af43a7413b34eac7bf0c909c0e, master merge 451c314907fea74cd3b9e40684ad1bc1028692fa. All six jobs and 16 kernel assertion steps passed. No independent review. The baseline table above is historical; use the following for current status.
+
+| IDs | Current scoped evidence | Remaining boundary |
+|---|---|---|
+| T01/T10 | KERNEL_TESTED — direct IPv4 positive/negative receiver controls | Guarded or explicitly monitored PID, not universal host policy |
+| T02 | KERNEL_TESTED — guarded fork/exec, pinned survivor, cgroup migration denial | Legacy PID mode and arbitrary A2 containers excluded |
+| T03/T04 | KERNEL_TESTED (scoped) — native/mapped IPv6 TCP and native/mapped UDP, connected and explicit send overrides; optional TCP service allowlist | No exhaustive protocol, DNS, proxy, or semantic authorization claim |
+| T05/T06/T07 | KERNEL_TESTED (scoped) — configured Landlock executable, read/write/truncate/rename denials; external shared file/FIFO | Optional profile, trusted mounts and private workspace; alias/metadata gaps |
+| T08 | KERNEL_TESTED (scoped) — seccomp BPF syscall denial and capability drop | No kernel exploit or root-resistance claim |
+| T09 | KERNEL_TESTED (scoped) — frozen maps, pin tampering, lifecycle and post-crash recovery | Policy provenance slice pending; signed release, audit anchoring and A3 remain open |
+| T11 | NOT UNIVERSALLY ENFORCED | Trusted application gateway required |
+| T12 | IMPLEMENTED_UNVERIFIED | Windows native enforcement evidence not established |
+| T13 | PARTIAL KERNEL_TESTED — crash persistence and safe recovery; admission checks | Outage/restart/failure matrix and automatic recovery incomplete |
+| T14 | NOT_IMPLEMENTED | A3 trusted-boot design and validation outstanding |
+| T15 | OUT OF SCOPE | No general kernel exploit protection |
+
+P0.5 policy digest slice adds a versioned canonical config+seccomp digest, optional expected-digest admission before attachment and trusted supervisor snapshot log after pinning. No cryptographic signature or remote anchoring. New tests pending. The original programme remains active.
