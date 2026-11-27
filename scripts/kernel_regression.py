@@ -137,18 +137,27 @@ def execute(evidence):
                 name, seconds = case["name"], case["timeout_seconds"]
                 print(f"Running {name}", flush=True)
                 start = time.monotonic()
-                proc = subprocess.run(
-                    ["sudo", "-n", "env", "GAVEL_RUN_KERNEL_TESTS=1", "timeout",
+                argv = [
+                    "sudo", "-n", "env", "GAVEL_RUN_KERNEL_TESTS=1", "timeout",
                      "--kill-after=5s", f"{seconds+5}s", str(binary),
-                     "-test.run", "^"+name+"$", "-test.v", f"-test.timeout={seconds}s"],
-                    cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, errors="replace", timeout=seconds+20)
+                     "-test.run", "^"+name+"$", "-test.v", f"-test.timeout={seconds}s"]
+                try:
+                    proc = subprocess.run(argv, cwd=ROOT, stdout=subprocess.PIPE,
+                                          stderr=subprocess.STDOUT, text=True, errors="replace",
+                                          timeout=seconds+20)
+                    code, output = proc.returncode, proc.stdout
+                except subprocess.TimeoutExpired as exc:
+                    code = 124
+                    output = exc.stdout or b""
+                    if isinstance(output, bytes):
+                        output = output.decode("utf-8", errors="replace")
+                    output += "\nOuter runner timeout; VM must be discarded.\n"
                 log = evidence / (name + ".log")
-                log.write_text(proc.stdout)
-                case.update(exit_code=proc.returncode, duration_seconds=round(time.monotonic()-start, 3),
+                log.write_text(output)
+                case.update(exit_code=code, duration_seconds=round(time.monotonic()-start, 3),
                             log=log.name, log_sha256=digest(log),
-                            status="passed" if verdict(name, proc.returncode, proc.stdout) else "failed")
-                print(proc.stdout, flush=True)
+                            status="passed" if verdict(name, code, output) else "failed")
+                print(output, flush=True)
                 save()
                 if case["status"] != "passed":
                     # A failing test may have left privileged state behind.
