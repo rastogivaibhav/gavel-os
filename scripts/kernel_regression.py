@@ -35,6 +35,7 @@ CASES = {
     "TestKernelGuardedStrictPolicyAdmission": 65,
     "TestKernelGuardedOrphanSweep": 80,
     "TestKernelGuardedRecoveryFaultTolerance": 80,
+    "TestKernelGuardedRecoveryInterruption": 90,
 }
 # Subprocess entry points, not standalone assertions. Their parent tests invoke them.
 HELPERS = {
