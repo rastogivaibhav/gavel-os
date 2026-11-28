@@ -1,0 +1,14 @@
+[Unit]
+Description=GavelOS guarded startup recovery barrier
+RequiresMountsFor=/sys/fs/bpf /sys/fs/cgroup /run
+After=local-fs.target
+Before=gavel-orphan-recovery.service
+
+[Service]
+Type=oneshot
+User=root
+Environment=GAVEL_CGROUP_PATH=/sys/fs/cgroup
+EnvironmentFile=-/etc/gavel/recovery.env
+ExecStart=/usr/local/bin/gavel-enforcer boot-init
+RemainAfterExit=yes
+TimeoutStartSec=5min
