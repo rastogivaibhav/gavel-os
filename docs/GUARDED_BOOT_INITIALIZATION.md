@@ -1,0 +1,15 @@
+# T13 — guarded boot initialization
+
+Status IMPLEMENTED_UNVERIFIED pending CI. This is a startup barrier, not a reboot-surviving security policy or a claim that actual reboot has been tested.
+
+The trusted host initializes using the one-shot command `gavel-enforcer boot-init`. The command holds an exclusive nonblocking boot lifecycle lease, invalidates prior readiness, validates host procfs and the configured cgroup v2 parent, executes orphan recovery, refuses busy or failed candidates, and refuses any remaining generated cgroup name without attempting destructive recovery of unknown ownership. Only after success it atomically publishes a root-owned 0600 readiness marker in the existing trusted /run lifecycle directory containing the current kernel boot UUID and parent path/device/inode. All guarded launches take a shared lease throughout their lifetime; cooperating launches cannot race initialization. Managed launches set GAVEL_REQUIRE_BOOT_INIT=1 and refuse absent, stale, malformed or wrong-parent markers. Ordinary launches still share the barrier but retain compatibility when the requirement is unset. This is not an access-control boundary against a trusted operator who can omit the flag or use a different launcher.
+
+## Deployment
+
+Install the reviewed boot service from deploy/systemd and configure /etc/gavel/recovery.env with the same explicit GAVEL_CGROUP_PATH as managed workloads. Ensure cgroup v2 and bpffs are actually mounted by the trusted host before boot-init; RequiresMountsFor orders known mount units but does not create bpffs. Install and customize the example guarded workload unit (including executable and dedicated identity in root-owned environment file); it Requires and orders after successful boot service and sets mandatory readiness, with automatic restart disabled. Configure the periodic recovery service/timer separately if required. Do not allow the environment file to override the mandatory readiness or parent. Do not confuse the legacy gavel-enforcer.service PID monitor with guarded launch. No unit is installed or started by this change.
+
+All state is boot-local. A real reboot destroys prior kernel tasks and pinned BPF objects; this feature verifies fresh boot identity rather than restoring old policy. It does not protect across arbitrary host namespace or mount changes, a compromised host root, or noncooperating privileged operators. A valid marker records successful startup reconciliation, not continuous health; subsequent guarded admission and active policy checks remain necessary. Actual reboot, systemd dependency execution, mount failure injection and service restart tests require a separately authorized disposable VM. P0.7 remains deferred.
+
+## Regression
+
+The 25th kernel assertion exercises missing, stale synthetic boot UUID and wrong parent identity markers against real guarded launch; exclusive/shared boot barrier; refusal and preservation of an unattributed cgroup; actual pinned orphan cleanup; and successful fresh unprivileged guarded launch after initialization. No actual reboot is performed by this assertion.

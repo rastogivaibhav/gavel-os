@@ -1,0 +1,13 @@
+# T13: guarded active remote policy watchdog
+
+Status: IMPLEMENTED_UNVERIFIED pending privileged CI.
+
+For a guarded workload launched using the remote control plane, the trusted supervisor checks the current effective remote configuration against the canonical launch digest every five seconds after the previous successful check. Requests use the existing five-second HTTP client timeout and can be cancelled on normal workload shutdown. A transport/HTTP/decode error, non-online status, invalid or empty effective policy, or a changed effective policy triggers termination of the complete protected cgroup. No fallback to local policy, live kernel map mutation, unpin-before-empty, or automatic restart is allowed. The original frozen kernel policy remains installed while termination is attempted. A failure to kill or prove emptiness leaves protection pinned for trusted recovery; it is not proof of quarantine. Local-policy workloads retain their existing behavior. A subsequent workload must undergo ordinary new-launch admission.
+
+The polling interval and HTTP timeout provide a nominal detection window of up to about ten seconds under a responsive supervisor and normal scheduling; this is not a hard real-time guarantee or immediate revocation. The immutable old policy can still permit operations previously authorized before a change is detected. This is snapshot-based polling, not a cryptographic lease, signed policy, or continuous connectivity guarantee. An unchanged effective digest (even with reordered/duplicated equivalent IPs or different non-enforced metadata) is allowed. Policy source, local filesystem/identity/filter configuration remain fixed for the launch. Remote policy authority and transport trust retain the existing deployment assumptions. Supervisor death is handled by existing pinned protection and orphan recovery, not by a surviving watchdog. No host-root resistance claim.
+
+## Verification
+
+The twenty-third standalone kernel test uses a real guarded parent and descendant, real allowed and denied loopback connections, and a synthetic HTTP server. After a healthy refresh with the same configuration, the server is changed to return HTTP 503, a changed effective blocklist, an empty policy, or degraded status. Each case requires nonzero supervisor result, cgroup and pin removal after termination, and receiver controls. Tests run only in the authorized ephemeral CI VM. Transport timeout, malformed responses under load, deliberate supervisor stalls, reboot, hard deadlines, authenticated expiring policy leases and restart orchestration remain separate verification targets.
+
+P0.7 independent reproduction remains deferred.

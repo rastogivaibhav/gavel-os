@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -47,6 +48,10 @@ func runtimeControlPlaneURL() string {
 }
 
 func fetchRuntimePolicy(hostID, runtimeOS, runtimeArch, runtimeMode string, enforcementCapable bool, agentID, component string) (RuntimePolicyResponse, error) {
+	return fetchRuntimePolicyContext(context.Background(), hostID, runtimeOS, runtimeArch, runtimeMode, enforcementCapable, agentID, component)
+}
+
+func fetchRuntimePolicyContext(ctx context.Context, hostID, runtimeOS, runtimeArch, runtimeMode string, enforcementCapable bool, agentID, component string) (RuntimePolicyResponse, error) {
 	payload := RuntimePolicyRequest{
 		HostID:             hostID,
 		RuntimeOS:          runtimeOS,
@@ -61,7 +66,7 @@ func fetchRuntimePolicy(hostID, runtimeOS, runtimeArch, runtimeMode string, enfo
 		return RuntimePolicyResponse{}, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, runtimeControlPlaneURL()+"/external/runtime/policy", bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, runtimeControlPlaneURL()+"/external/runtime/policy", bytes.NewReader(data))
 	if err != nil {
 		return RuntimePolicyResponse{}, err
 	}
