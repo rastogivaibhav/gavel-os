@@ -150,7 +150,10 @@ func loadLinuxEnforcerConfigFromEnv() (LinuxEnforcerConfig, error) {
 
 	proxyIP := strings.TrimSpace(os.Getenv("GAVEL_PROXY_IPV4"))
 	proxyPort := strings.TrimSpace(os.Getenv("GAVEL_PROXY_PORT"))
-	if proxyIP != "" && proxyPort != "" {
+	if (proxyIP == "") != (proxyPort == "") {
+		return LinuxEnforcerConfig{}, fmt.Errorf("proxy IPv4 and port must be configured together")
+	}
+	if proxyIP != "" {
 		parsedIP, err := parseIPv4(proxyIP)
 		if err != nil {
 			return LinuxEnforcerConfig{}, fmt.Errorf("parse proxy ip: %w", err)
@@ -158,6 +161,9 @@ func loadLinuxEnforcerConfigFromEnv() (LinuxEnforcerConfig, error) {
 		port, err := strconv.ParseUint(proxyPort, 10, 16)
 		if err != nil {
 			return LinuxEnforcerConfig{}, fmt.Errorf("parse proxy port: %w", err)
+		}
+		if port == 0 {
+			return LinuxEnforcerConfig{}, fmt.Errorf("proxy port must be in 1..65535")
 		}
 		config.Proxy = LinuxProxyConfig{
 			IPv4:    parsedIP,
@@ -194,8 +200,15 @@ func linuxEnforcerConfigFromRuntimePolicy(policy RuntimePolicyResponse) (LinuxEn
 		config.BlockedIPv6 = append(config.BlockedIPv6, ip)
 	}
 
-	if policy.ProxyIPv4 != "" && policy.ProxyPort > 0 {
-		parsedIP, err := parseIPv4(policy.ProxyIPv4)
+	proxyIP := strings.TrimSpace(policy.ProxyIPv4)
+	if (proxyIP == "") != (policy.ProxyPort == 0) {
+		return LinuxEnforcerConfig{}, fmt.Errorf("proxy IPv4 and port must be configured together")
+	}
+	if proxyIP != "" {
+		if policy.ProxyPort < 1 || policy.ProxyPort > 65535 {
+			return LinuxEnforcerConfig{}, fmt.Errorf("proxy port must be in 1..65535")
+		}
+		parsedIP, err := parseIPv4(proxyIP)
 		if err != nil {
 			return LinuxEnforcerConfig{}, fmt.Errorf("parse proxy ip from policy: %w", err)
 		}
