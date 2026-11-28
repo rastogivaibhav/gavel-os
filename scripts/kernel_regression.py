@@ -32,6 +32,7 @@ CASES = {
     "TestKernelGuardedPolicyIntegrity": 55,
     "TestKernelGuardedLifecycleLease": 25,
     "TestKernelGuardedPolicyProvenance": 55,
+    "TestKernelGuardedStrictPolicyAdmission": 65,
 }
 # Subprocess entry points, not standalone assertions. Their parent tests invoke them.
 HELPERS = {
