@@ -306,9 +306,13 @@ func kernelSupervisorCrashProof(t *testing.T, sweep bool) {
 		foreign, err := os.MkdirTemp("/sys/fs/cgroup", "gavel-agent-")
 		if err != nil { t.Fatal(err) }
 		defer os.Remove(foreign)
-		// Wrong parent: the link target cannot be established. No destructive action.
-		if err := verifyGuardedRecoveryTarget(foreign, cgroupName); err == nil {
-			t.Fatal("accepted wrong cgroup parent")
+		// A real same-named cgroup under a different parent must not be
+		// mistaken for the pinned target, even when owned by trusted root.
+		wrong := filepath.Join(foreign, cgroupName)
+		if err := os.Mkdir(wrong, 0700); err != nil { t.Fatal(err) }
+		defer os.Remove(wrong)
+		if err := verifyGuardedRecoveryTarget(foreign, cgroupName); err == nil || !strings.Contains(err.Error(), "does not bind expected cgroup") {
+			t.Fatalf("wrong cgroup identity must be rejected: %v", err)
 		}
 		result, err := sweepGuardedOrphans()
 		if err != nil || len(result.Recovered) != 1 || result.Recovered[0] != cgroupName || len(result.Busy) != 0 {
