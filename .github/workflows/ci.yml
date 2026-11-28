@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main", "master"]
   pull_request:
-    branches: ["main", "master", "feat/linux-ipv6-connect6-20261124", "feat/guarded-identity-hardening-20261124", "feat/guarded-landlock-filesystem-20261124", "feat/p0-resource-isolation", "feat/p0-network-mediation", "feat/p0-system-ipc", "feat/p0-file-ipc-profile", "feat/p0-tcp-service-profile", "feat/p0-policy-integrity"]
+    branches: ["main", "master"]
 
 jobs:
   # ── Go enforcer tests ────────────────────────────────────────────────────────
@@ -167,126 +167,42 @@ jobs:
         working-directory: vscode-extension
         run: npm run build
 
-  # Security proof job: only branch-originated PRs in THIS repository.
-  # Never run arbitrary fork-contributed code with elevated kernel privileges.
+  # Privileged tests run only on GitHub-hosted disposable VMs for trusted
+  # repository-originated PRs and protected integration branches. Never use
+  # pull_request_target, self-hosted runners, fork code or repository secrets.
   kernel-denial-proof:
-    name: Kernel IPv4 Denial (ephemeral VM)
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (github.head_ref == 'feat/linux-ipv6-connect6-20261124' || github.head_ref == 'feat/linux-udp-sendmsg-20261124' || github.head_ref == 'feat/guarded-identity-hardening-20261124' || github.head_ref == 'feat/guarded-landlock-filesystem-20261124' || github.head_ref == 'feat/p0-resource-isolation' || github.head_ref == 'feat/p0-unix-ipc-isolation' || github.head_ref == 'feat/p0-network-mediation' || github.head_ref == 'feat/p0-helper-identity' || github.head_ref == 'feat/p0-system-ipc' || github.head_ref == 'feat/p0-file-ipc-profile' || github.head_ref == 'feat/p0-tcp-service-profile' || github.head_ref == 'feat/p0-policy-integrity' || github.head_ref == 'feat/p0-recovery-serialization' || github.head_ref == 'feat/p0-policy-provenance') }}
+    name: Kernel Security Regression (ephemeral VM)
+    if: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       contents: read
+    env:
+      GAVEL_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: enforcer/go.mod
-          cache: true
-      - name: Mount bpffs for persistent kernel link tests
+          cache: false
+      - name: Verify regression runner failure semantics
+        run: python3 scripts/kernel_regression.py --self-test
+      - name: Mount bpffs
         run: |
           if ! mountpoint -q /sys/fs/bpf; then
             sudo mount -t bpf bpf /sys/fs/bpf
           fi
           findmnt -n -o FSTYPE --target /sys/fs/bpf | grep -qx bpf
-      - name: Record isolated kernel environment
-        run: |
-          uname -a
-          sudo sh -c 'grep -E "^(CapEff|CapBnd):" /proc/self/status'
-          stat -fc %T /sys/fs/cgroup
-      - name: Compile kernel proof test
-        working-directory: enforcer
-        run: |
-          go test -c -o /tmp/gavel-kernel.test .
-          chmod 755 /tmp/gavel-kernel.test
-      - name: Assert real isolated cgroup/eBPF denial
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 45s /tmp/gavel-kernel.test \
-            -test.run TestKernelConnect4Denial -test.v -test.timeout=40s
-      - name: Assert agent and descendant inherit kernel cgroup denial and no supplementary groups
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run TestKernelGuardedAgentAndDescendants -test.v -test.timeout=55s
-      - name: Assert standalone monitored PID IPv6 TCP and native UDP kernel denial
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 65s /tmp/gavel-kernel.test \
-            -test.run TestKernelConnect6DenialForMonitoredPID -test.v -test.timeout=60s
-      - name: Assert IPv6 TCP and native UDP denial inherited by agent child
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 75s /tmp/gavel-kernel.test \
-            -test.run TestKernelGuardedIPv6AndDescendants -test.v -test.timeout=70s
-      - name: Assert pinned kernel protection survives supervisor SIGKILL
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 85s /tmp/gavel-kernel.test \
-            -test.run TestKernelSupervisorSIGKILLRetainsBPF -test.v -test.timeout=80s
-
-      - name: Assert actual privilege escalation and sibling cgroup migration denial
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuarded(Containment|RejectsDelegatedCgroup)$' -test.v -test.timeout=55s
-
-      - name: Assert real guarded Landlock filesystem enforcement
-        if: ${{ github.head_ref == 'feat/guarded-landlock-filesystem-20261124' || github.head_ref == 'feat/p0-resource-isolation' || github.head_ref == 'feat/p0-unix-ipc-isolation' || github.head_ref == 'feat/p0-network-mediation' || github.head_ref == 'feat/p0-helper-identity' || github.head_ref == 'feat/p0-system-ipc' || github.head_ref == 'feat/p0-file-ipc-profile' || github.head_ref == 'feat/p0-tcp-service-profile' || github.head_ref == 'feat/p0-policy-integrity' || github.head_ref == 'feat/p0-recovery-serialization' || github.head_ref == 'feat/p0-policy-provenance' }}
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedFilesystem$' -test.v -test.timeout=55s
-
-      - name: Assert guarded inherited resource isolation
-        if: ${{ github.head_ref == 'feat/p0-resource-isolation' || github.head_ref == 'feat/p0-unix-ipc-isolation' || github.head_ref == 'feat/p0-network-mediation' || github.head_ref == 'feat/p0-helper-identity' || github.head_ref == 'feat/p0-system-ipc' || github.head_ref == 'feat/p0-file-ipc-profile' || github.head_ref == 'feat/p0-tcp-service-profile' || github.head_ref == 'feat/p0-policy-integrity' || github.head_ref == 'feat/p0-recovery-serialization' || github.head_ref == 'feat/p0-policy-provenance' }}
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedDescriptors$' -test.v -test.timeout=55s
-
-      - name: Assert guarded external Unix IPC isolation
-        if: ${{ github.head_ref == 'feat/p0-unix-ipc-isolation' || github.head_ref == 'feat/p0-network-mediation' || github.head_ref == 'feat/p0-helper-identity' || github.head_ref == 'feat/p0-system-ipc' || github.head_ref == 'feat/p0-file-ipc-profile' || github.head_ref == 'feat/p0-tcp-service-profile' || github.head_ref == 'feat/p0-policy-integrity' || github.head_ref == 'feat/p0-recovery-serialization' || github.head_ref == 'feat/p0-policy-provenance' }}
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedUnixIPC$' -test.v -test.timeout=55s
-
-      - name: Assert mapped IPv6 and connected UDP destination enforcement
-        if: ${{ github.head_ref == 'feat/p0-network-mediation' || github.head_ref == 'feat/p0-helper-identity' || github.head_ref == 'feat/p0-system-ipc' || github.head_ref == 'feat/p0-file-ipc-profile' || github.head_ref == 'feat/p0-tcp-service-profile' || github.head_ref == 'feat/p0-policy-integrity' || github.head_ref == 'feat/p0-recovery-serialization' || github.head_ref == 'feat/p0-policy-provenance' }}
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 75s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedNetworkMediation$' -test.v -test.timeout=70s
-
-      - name: Assert exclusive guarded UID and helper boundary
-        if: ${{ github.head_ref == 'feat/p0-helper-identity' || github.head_ref == 'feat/p0-system-ipc' || github.head_ref == 'feat/p0-file-ipc-profile' || github.head_ref == 'feat/p0-tcp-service-profile' || github.head_ref == 'feat/p0-policy-integrity' || github.head_ref == 'feat/p0-recovery-serialization' || github.head_ref == 'feat/p0-policy-provenance' }}
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedHelperIdentity$' -test.v -test.timeout=55s
-
-      - name: Assert guarded System V IPC and POSIX message queue isolation
-        if: ${{ github.head_ref == 'feat/p0-system-ipc' || github.head_ref == 'feat/p0-file-ipc-profile' || github.head_ref == 'feat/p0-tcp-service-profile' || github.head_ref == 'feat/p0-policy-integrity' || github.head_ref == 'feat/p0-recovery-serialization' || github.head_ref == 'feat/p0-policy-provenance' }}
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedSystemIPC$' -test.v -test.timeout=55s
-
-      - name: Assert isolated filesystem profile and file-backed IPC protection
-        if: ${{ github.head_ref == 'feat/p0-file-ipc-profile' || github.head_ref == 'feat/p0-tcp-service-profile' || github.head_ref == 'feat/p0-policy-integrity' || github.head_ref == 'feat/p0-recovery-serialization' || github.head_ref == 'feat/p0-policy-provenance' }}
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedFileIPCProfile$' -test.v -test.timeout=55s
-
-      - name: Assert guarded default-deny TCP service profile
-        if: ${{ github.head_ref == 'feat/p0-tcp-service-profile' || github.head_ref == 'feat/p0-policy-integrity' || github.head_ref == 'feat/p0-recovery-serialization' || github.head_ref == 'feat/p0-policy-provenance' }}
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedTCPServiceProfile$' -test.v -test.timeout=55s
-
-      - name: Assert frozen guarded policy maps and pin integrity
-        if: ${{ github.head_ref == 'feat/p0-policy-integrity' || github.head_ref == 'feat/p0-recovery-serialization' || github.head_ref == 'feat/p0-policy-provenance' }}
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedPolicyIntegrity$' -test.v -test.timeout=55s
-
-      - name: Assert guarded lifecycle lease validation and exclusion
-        if: ${{ github.head_ref == 'feat/p0-recovery-serialization' || github.head_ref == 'feat/p0-policy-provenance' }}
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 30s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedLifecycleLease$' -test.v -test.timeout=25s
-
-      - name: Assert guarded policy digest admission and launch binding
-        if: ${{ github.head_ref == 'feat/p0-policy-provenance' }}
-        run: |
-          sudo env GAVEL_RUN_KERNEL_TESTS=1 timeout 60s /tmp/gavel-kernel.test \
-            -test.run '^TestKernelGuardedPolicyProvenance$' -test.v -test.timeout=55s
+      - name: Execute complete kernel assertion inventory
+        run: python3 scripts/kernel_regression.py --isolated-vm --evidence kernel-evidence
+      - name: Upload kernel evidence (including failed runs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-security-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: kernel-evidence/
+          if-no-files-found: error
+          retention-days: 30
