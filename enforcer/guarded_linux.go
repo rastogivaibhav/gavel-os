@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -210,19 +211,38 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	stops := make(chan os.Signal, 1)
 	signal.Notify(stops, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(stops)
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-stops:
-			if err := killProtectedCgroup(cg); err != nil {
-				log.Printf("SECURITY CRITICAL: failed to terminate protected cgroup on shutdown: %v", err)
-			}
-		case <-done:
-		}
-	}()
-
-	waitErr := cmd.Wait()
-	close(done)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// A remote policy failure triggers termination of the entire cgroup,
+	// while the original immutable enforcement remains installed.
+	var watchdog <-chan error
+	var watcherDone chan struct{}
+	if preflight.PolicySource == "control_plane" {
+		result := make(chan error, 1)
+		watchdog = result
+		watcherDone = make(chan struct{})
+		go func() {
+			defer close(watcherDone)
+			result <- watchGuardedRemotePolicy(ctx, guardedPolicyWatchInterval, func(ctx context.Context) error {
+				return checkGuardedRemotePolicy(ctx, preflight, uid, gid, fsArgs, filter, digest)
+			})
+		}()
+		defer func() { cancel(); <-watcherDone }()
+	}
+	waited := make(chan error, 1)
+	go func() { waited <- cmd.Wait() }()
+	var waitErr, policyErr error
+	childExited := false
+	select {
+	case waitErr = <-waited:
+		childExited = true
+	case <-stops:
+		log.Print("protected workload shutdown requested")
+	case policyErr = <-watchdog:
+		if policyErr == nil { policyErr = fmt.Errorf("remote policy watchdog stopped unexpectedly") }
+		log.Printf("SECURITY BLOCKER: active guarded policy authorization lost: %v", policyErr)
+	}
+	cancel()
 	// A successful direct child exit does NOT imply descendants have exited.
 	// Kill the full cgroup before releasing the hook; fail the command if this
 	// cannot be verified. Abnormal supervisor death remains out of scope.
@@ -233,6 +253,8 @@ func runGuardedAgent(argv []string) (resultErr error) {
 		return fmt.Errorf("SECURITY CRITICAL: cannot confirm protected workload exited: %w", err)
 	}
 	terminated = true
+	if !childExited { waitErr = <-waited }
+	if policyErr != nil { return fmt.Errorf("SECURITY BLOCKER: active guarded policy authorization lost: %w", policyErr) }
 	if waitErr != nil {
 		return fmt.Errorf("protected workload exited with error: %w", waitErr)
 	}
