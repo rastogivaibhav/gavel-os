@@ -95,6 +95,9 @@ func runGuardedAgent(argv []string) (resultErr error) {
 		return fmt.Errorf("SECURITY BLOCKER: guarded lifecycle lease for empty cgroup %s: %w", cg, err)
 	}
 	defer lifecycle.Close()
+	if receipt, err := readGuardedRecoveryReceipt(filepath.Base(cg)); err != nil || receipt != nil {
+		return fmt.Errorf("SECURITY BLOCKER: stale or unreadable recovery receipt for %s: %v", cg, err)
+	}
 
 	// The BPF link is pinned *before* the unprivileged child is launched.
 	// A Go defer cannot execute under SIGKILL; the persisted bpffs link
