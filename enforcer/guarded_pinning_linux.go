@@ -129,6 +129,11 @@ func attachPinnedGuardedEnforcer(cgroup string, config LinuxEnforcerConfig) (str
 // unpopulated. Missing pins are supported for older workloads and
 // for retries after partially successful cleanup.
 func unpinGuardedEnforcer(name string) error {
+	return unpinGuardedEnforcerWithCheckpoint(name, nil)
+}
+
+// checkpoint is an internal test observer; production callers pass nil.
+func unpinGuardedEnforcerWithCheckpoint(name string, checkpoint func(string)) error {
 	base, err := guardedPinPath(name)
 	if err != nil {
 		return err
@@ -147,6 +152,7 @@ func unpinGuardedEnforcer(name string) error {
 		if unpinErr != nil {
 			return fmt.Errorf("unpin protected kernel link %s: %w", pin, unpinErr)
 		}
+		if checkpoint != nil { checkpoint("unpin:" + guardedNetworkPinSuffixes[i]) }
 	}
 	return nil
 }
