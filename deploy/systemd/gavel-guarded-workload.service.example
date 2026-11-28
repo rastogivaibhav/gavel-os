@@ -1,0 +1,17 @@
+[Unit]
+Description=Example GavelOS guarded workload (customize before installation)
+Requires=gavel-guarded-boot.service
+After=gavel-guarded-boot.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Environment=GAVEL_CGROUP_PATH=/sys/fs/cgroup
+Environment=GAVEL_REQUIRE_BOOT_INIT=1
+EnvironmentFile=/etc/gavel/guarded-workload.env
+ExecStart=/usr/local/bin/gavel-enforcer run /opt/gavel/workload
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
