@@ -175,6 +175,11 @@ func recoverGuardedAgent(name string) error {
 	if !ok {
 		return fmt.Errorf("cannot resolve protected cgroup parent")
 	}
+	return recoverGuardedAgentLocked(parent, name)
+}
+
+// Caller must hold the lifecycle lease until recovery returns.
+func recoverGuardedAgentLocked(parent, name string) error {
 	cgroup := filepath.Join(parent, name)
 	if err := validateGuardedCgroup(cgroup); err != nil {
 		return fmt.Errorf("protected cgroup missing or untrusted %s: %w", cgroup, err)

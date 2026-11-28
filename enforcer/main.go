@@ -89,6 +89,17 @@ func main() {
 		log.Printf("guarded workload %s recovered: terminated, unpinned and removed", os.Args[2])
 		return
 	}
+	if len(os.Args) >= 2 && os.Args[1] == "recover-orphans" {
+		if len(os.Args) != 2 {
+			log.Fatal("usage: gavel-enforcer recover-orphans; requires trusted privileged operator")
+		}
+		result, err := sweepGuardedOrphans()
+		log.Printf("orphan recovery sweep recovered=%v busy=%v gone=%v", result.Recovered, result.Busy, result.Gone)
+		if err != nil {
+			log.Fatalf("SECURITY BLOCKER: orphan recovery incomplete: %v", err)
+		}
+		return
+	}
 	preflightOnly := flag.Bool("preflight", false, "print runtime preflight and exit")
 	auditOnly := flag.Bool("audit-only", false, "explicitly start in UNPROTECTED audit-only mode; never use for protected agents")
 	flag.Parse()

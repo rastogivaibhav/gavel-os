@@ -1,0 +1,11 @@
+[Unit]
+Description=GavelOS guarded orphan recovery (trusted host)
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=GAVEL_CGROUP_PATH=/sys/fs/cgroup
+EnvironmentFile=-/etc/gavel/recovery.env
+ExecStart=/usr/local/bin/gavel-enforcer recover-orphans
+TimeoutStartSec=5min

@@ -120,6 +120,14 @@ func guardedCgroupNameForPID(pid int) (string, error) {
 // must remain alive AND be denied by a pinned kernel hook. Recovery then
 // verifies the whole cgroup is empty before unpinning.
 func TestKernelSupervisorSIGKILLRetainsBPF(t *testing.T) {
+	kernelSupervisorCrashProof(t, false)
+}
+
+func TestKernelGuardedOrphanSweep(t *testing.T) {
+	kernelSupervisorCrashProof(t, true)
+}
+
+func kernelSupervisorCrashProof(t *testing.T, sweep bool) {
 	if os.Getenv("GAVEL_RUN_KERNEL_TESTS") != "1" {
 		t.Skip("requires isolated privileged Linux runner and bpffs")
 	}
@@ -238,6 +246,18 @@ func TestKernelSupervisorSIGKILLRetainsBPF(t *testing.T) {
 		l.Close()
 	}
 	t.Log("KERNEL PROOF: live supervisor lease refused recovery, workload and all pins retained")
+	if sweep {
+		result, err := sweepGuardedOrphans()
+		if err != nil || len(result.Busy) != 1 || result.Busy[0] != cgroupName || len(result.Recovered) != 0 {
+			t.Fatalf("live sweep must report busy: %+v %v", result, err)
+		}
+		if err := syscallKillZero(pid); err != nil { t.Fatal(err) }
+		for _, suffix := range guardedNetworkPinSuffixes {
+			l, err := link.LoadPinnedLink(pin+suffix, nil)
+			if err != nil { t.Fatal(err) }; l.Close()
+		}
+		t.Log("KERNEL PROOF: sweep skipped live workload and retained all four links")
+	}
 
 	if err := supervisor.Process.Kill(); err != nil {
 		t.Fatal(err)
@@ -281,7 +301,30 @@ func TestKernelSupervisorSIGKILLRetainsBPF(t *testing.T) {
 		t.Fatalf("competing recovery must be refused: %v",err)
 	}
 	if err := recoveryLease.Close(); err != nil { t.Fatal(err) }
-	if err := recoverGuardedAgent(cgroupName); err != nil {
+	if sweep {
+		// A root-owned, similarly named cgroup with no pin is not a candidate.
+		foreign, err := os.MkdirTemp("/sys/fs/cgroup", "gavel-agent-")
+		if err != nil { t.Fatal(err) }
+		defer os.Remove(foreign)
+		// A real same-named cgroup under a different parent must not be
+		// mistaken for the pinned target, even when owned by trusted root.
+		wrong := filepath.Join(foreign, cgroupName)
+		if err := os.Mkdir(wrong, 0700); err != nil { t.Fatal(err) }
+		defer os.Remove(wrong)
+		if err := verifyGuardedRecoveryTarget(foreign, cgroupName); err == nil || !strings.Contains(err.Error(), "does not bind expected cgroup") {
+			t.Fatalf("wrong cgroup identity must be rejected: %v", err)
+		}
+		result, err := sweepGuardedOrphans()
+		if err != nil || len(result.Recovered) != 1 || result.Recovered[0] != cgroupName || len(result.Busy) != 0 {
+			t.Fatalf("orphan sweep failed: %+v %v", result, err)
+		}
+		if _, err := os.Stat(foreign); err != nil { t.Fatalf("unregistered cgroup touched: %v", err) }
+		again, err := sweepGuardedOrphans()
+		if err != nil || len(again.Recovered) != 0 || len(again.Busy) != 0 {
+			t.Fatalf("repeat sweep must be idle: %+v %v", again, err)
+		}
+		t.Log("KERNEL PROOF: sweep recovered only the pinned orphan, left unregistered cgroup and repeated safely")
+	} else if err := recoverGuardedAgent(cgroupName); err != nil {
 		t.Fatalf("independent trusted recovery failed: %v", err)
 	}
 	if _, err := os.Stat(pin); !os.IsNotExist(err) {

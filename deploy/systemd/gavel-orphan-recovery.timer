@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically recover orphaned GavelOS guarded workloads
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=30s
+AccuracySec=5s
+Unit=gavel-orphan-recovery.service
+
+[Install]
+WantedBy=timers.target
