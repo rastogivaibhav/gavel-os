@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -68,7 +69,9 @@ func inspectGuardedRecoveryTarget(parent, name string) (guardedRecoveryReceipt, 
 	for _, hook := range hooks {
 		pin := base + hook.suffix
 		l, err := link.LoadPinnedLink(pin, nil)
-		if os.IsNotExist(err) { continue }
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOENT) {
+			continue
+		}
 		if err != nil {
 			return id, count, fmt.Errorf("cannot verify pin %s: %w", pin, err)
 		}
