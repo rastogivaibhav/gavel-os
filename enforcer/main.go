@@ -79,6 +79,15 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) >= 2 && os.Args[1] == "restart" {
+		if len(os.Args) < 5 {
+			log.Fatal("usage: gavel-enforcer restart <previous-cgroup> <approved-digest> <absolute-executable> [args...]")
+		}
+		if err := restartGuardedAgent(os.Args[2], os.Args[3], os.Args[4:]); err != nil {
+			log.Fatalf("SECURITY BLOCKER: guarded restart refused or failed: %v",err)
+		}
+		return
+	}
 	if len(os.Args) >= 2 && os.Args[1] == "recover" {
 		if len(os.Args) != 3 {
 			log.Fatal("usage: gavel-enforcer recover <gavel-agent-NAME>; requires trusted privileged operator")
