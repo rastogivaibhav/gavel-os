@@ -129,6 +129,11 @@ func attachPinnedGuardedEnforcer(cgroup string, config LinuxEnforcerConfig) (str
 // unpopulated. Missing pins are supported for older workloads and
 // for retries after partially successful cleanup.
 func unpinGuardedEnforcer(name string) error {
+	return unpinGuardedEnforcerWithCheckpoint(name, nil)
+}
+
+// checkpoint is an internal test observer; production callers pass nil.
+func unpinGuardedEnforcerWithCheckpoint(name string, checkpoint func(string)) error {
 	base, err := guardedPinPath(name)
 	if err != nil {
 		return err
@@ -136,7 +141,7 @@ func unpinGuardedEnforcer(name string) error {
 	for i := len(guardedNetworkPinSuffixes)-1; i >= 0; i-- {
 		pin := base + guardedNetworkPinSuffixes[i]
 		attached, err := link.LoadPinnedLink(pin, nil)
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOENT) {
 			continue
 		}
 		if err != nil {
@@ -147,6 +152,7 @@ func unpinGuardedEnforcer(name string) error {
 		if unpinErr != nil {
 			return fmt.Errorf("unpin protected kernel link %s: %w", pin, unpinErr)
 		}
+		if checkpoint != nil { checkpoint("unpin:" + guardedNetworkPinSuffixes[i]) }
 	}
 	return nil
 }
@@ -175,28 +181,6 @@ func recoverGuardedAgent(name string) error {
 	if !ok {
 		return fmt.Errorf("cannot resolve protected cgroup parent")
 	}
-	return recoverGuardedAgentLocked(parent, name)
-}
-
-// Caller must hold the lifecycle lease until recovery returns.
-func recoverGuardedAgentLocked(parent, name string) error {
-	cgroup := filepath.Join(parent, name)
-	if err := validateGuardedCgroup(cgroup); err != nil {
-		return fmt.Errorf("protected cgroup missing or untrusted %s: %w", cgroup, err)
-	}
-	// Do not remove the only remaining enforcement attachment when we
-	// cannot stop the processes it protects.
-	if err := killProtectedCgroup(cgroup); err != nil {
-		return fmt.Errorf("SECURITY BLOCKER: cannot kill protected cgroup: %w", err)
-	}
-	if err := waitProtectedCgroupEmpty(cgroup, 5e9); err != nil {
-		return fmt.Errorf("SECURITY BLOCKER: protected cgroup not empty; link remains pinned: %w", err)
-	}
-	if err := unpinGuardedEnforcer(name); err != nil {
-		return fmt.Errorf("SECURITY BLOCKER: protected workload stopped but pinned link cleanup failed: %w", err)
-	}
-	if err := os.Remove(cgroup); err != nil {
-		return fmt.Errorf("remove recovered protected cgroup: %w", err)
-	}
-	return nil
+	_, err = recoverGuardedCandidateLocked(parent, name)
+	return err
 }
