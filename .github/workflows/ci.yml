@@ -198,6 +198,11 @@ jobs:
           findmnt -n -o FSTYPE --target /sys/fs/bpf | grep -qx bpf
       - name: Execute complete kernel assertion inventory
         run: python3 scripts/kernel_regression.py --isolated-vm --evidence kernel-evidence
+      - name: Execute systemd startup dependency proof
+        run: |
+          set -o pipefail
+          go -C enforcer build -o /tmp/gavel-ci-systemd-enforcer .
+          sudo -n bash scripts/systemd_startup_proof.sh --isolated-vm /tmp/gavel-ci-systemd-enforcer 2>&1 | tee kernel-evidence/systemd-startup.log
       - name: Upload kernel evidence (including failed runs)
         if: always()
         uses: actions/upload-artifact@v4
