@@ -55,3 +55,7 @@ The 23rd assertion exercises guarded parent/descendant termination after an unch
 ## T13 approved guarded restart
 
 The 24th assertion checks mandatory fresh snapshot approval, predecessor cleanup and lease, remote outage and pre-spawn policy change refusal, and fresh changed-policy enforcement. See [restart contract](GUARDED_APPROVED_RESTART.md). IMPLEMENTED_UNVERIFIED pending CI. The 23-case PR #30 baseline passed run 46174992448; P0.7 remains deferred.
+
+## T13 guarded boot initialization
+
+The 25th standalone assertion checks boot-scoped readiness, exclusive initialization/shared launch barriers, unknown cgroup refusal, actual pinned orphan recovery, and fresh guarded admission after startup reconciliation. See [boot initialization contract](GUARDED_BOOT_INITIALIZATION.md). IMPLEMENTED_UNVERIFIED until CI passes. Actual reboot and systemd dependency execution remain unverified; prior 24-case baseline passed run 46175821752. P0.7 remains deferred.
