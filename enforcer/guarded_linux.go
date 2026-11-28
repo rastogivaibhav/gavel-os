@@ -25,7 +25,11 @@ import (
 // Security scope: IP connect and unconnected UDP destination blocklists. Requires a modern pinnable BPF link;
 // the kernel hook survives a supervisor SIGKILL, but independent recovery is
 // required to kill any surviving descendants and remove the pin.
-func runGuardedAgent(argv []string) (resultErr error) {
+func runGuardedAgent(argv []string) error {
+	return runGuardedAgentWithApproval(argv, "")
+}
+
+func runGuardedAgentWithApproval(argv []string, approval string) (resultErr error) {
 	if len(argv) == 0 || argv[0] == "" {
 		return fmt.Errorf("usage: gavel-enforcer run <absolute-executable> [args...]")
 	}
@@ -51,6 +55,9 @@ func runGuardedAgent(argv []string) (resultErr error) {
 		return fmt.Errorf("SECURITY BLOCKER: filesystem policy: %w", err)
 	}
 	preflight := runLinuxPreflight()
+	if approval != "" && preflight.PolicySource != "control_plane" {
+		return fmt.Errorf("SECURITY BLOCKER: approved restart requires remote policy authority")
+	}
 	if !preflight.EnforcementCapable || !linuxEBPFProgramReady(preflight.EBPFProgramStatus) || !preflight.CgroupV2 {
 		return fmt.Errorf("SECURITY BLOCKER: kernel or cgroup preflight failed: %s", preflight.ReasonCode)
 	}
@@ -77,6 +84,11 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	defer filter.Close()
 	digest, err := guardedPolicyDigest(config, uid, gid, preflight.PolicySource, fsArgs, filter)
 	if err != nil { return fmt.Errorf("SECURITY BLOCKER: policy digest: %w", err) }
+	if approval != "" {
+		if err := verifyGuardedApprovedDigest(approval, digest); err != nil {
+			return fmt.Errorf("SECURITY BLOCKER: restart approval: %w", err)
+		}
+	}
 	if err := verifyGuardedPolicyDigest(digest); err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: policy digest: %w", err)
 	}
@@ -195,6 +207,13 @@ func runGuardedAgent(argv []string) (resultErr error) {
 		UseCgroupFD: true,
 		CgroupFD: int(cgfd.Fd()),
 		Pdeathsig: syscall.SIGKILL,
+	}
+	// Revalidate remote authorization after attaching all links, immediately
+	// before spawning. This narrows (but cannot eliminate) the remote race.
+	if preflight.PolicySource == "control_plane" {
+		if err := checkGuardedRemotePolicy(context.Background(), preflight, uid, gid, fsArgs, filter, digest); err != nil {
+			return fmt.Errorf("SECURITY BLOCKER: pre-spawn remote authorization lost: %w", err)
+		}
 	}
 	// Mark all ambient non-stdio descriptors close-on-exec. os/exec
 	// deliberately remaps only the sealed filter from ExtraFiles to FD 3.
