@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -24,7 +25,11 @@ import (
 // Security scope: IP connect and unconnected UDP destination blocklists. Requires a modern pinnable BPF link;
 // the kernel hook survives a supervisor SIGKILL, but independent recovery is
 // required to kill any surviving descendants and remove the pin.
-func runGuardedAgent(argv []string) (resultErr error) {
+func runGuardedAgent(argv []string) error {
+	return runGuardedAgentWithApproval(argv, "")
+}
+
+func runGuardedAgentWithApproval(argv []string, approval string) (resultErr error) {
 	if len(argv) == 0 || argv[0] == "" {
 		return fmt.Errorf("usage: gavel-enforcer run <absolute-executable> [args...]")
 	}
@@ -33,6 +38,15 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	}
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("guarded runner requires a privileged supervisor in an isolated cgroup-v2 host")
+	}
+	bootLease, err := acquireGuardedBootLease(false)
+	if err != nil { return fmt.Errorf("SECURITY BLOCKER: boot lifecycle: %w",err) }
+	defer bootLease.Close()
+	if value, set := os.LookupEnv(guardedBootRequiredEnv); set {
+		if value != "1" { return fmt.Errorf("SECURITY BLOCKER: invalid boot initialization requirement") }
+		parent, ok := resolveLinuxCgroupPath()
+		if !ok { return fmt.Errorf("SECURITY BLOCKER: cannot resolve boot cgroup parent") }
+		if err := requireGuardedBootReady(parent); err != nil { return fmt.Errorf("SECURITY BLOCKER: boot initialization: %w",err) }
 	}
 	uid, gid, err := guardedUnprivilegedIdentity()
 	if err != nil {
@@ -50,6 +64,9 @@ func runGuardedAgent(argv []string) (resultErr error) {
 		return fmt.Errorf("SECURITY BLOCKER: filesystem policy: %w", err)
 	}
 	preflight := runLinuxPreflight()
+	if approval != "" && preflight.PolicySource != "control_plane" {
+		return fmt.Errorf("SECURITY BLOCKER: approved restart requires remote policy authority")
+	}
 	if !preflight.EnforcementCapable || !linuxEBPFProgramReady(preflight.EBPFProgramStatus) || !preflight.CgroupV2 {
 		return fmt.Errorf("SECURITY BLOCKER: kernel or cgroup preflight failed: %s", preflight.ReasonCode)
 	}
@@ -76,6 +93,11 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	defer filter.Close()
 	digest, err := guardedPolicyDigest(config, uid, gid, preflight.PolicySource, fsArgs, filter)
 	if err != nil { return fmt.Errorf("SECURITY BLOCKER: policy digest: %w", err) }
+	if approval != "" {
+		if err := verifyGuardedApprovedDigest(approval, digest); err != nil {
+			return fmt.Errorf("SECURITY BLOCKER: restart approval: %w", err)
+		}
+	}
 	if err := verifyGuardedPolicyDigest(digest); err != nil {
 		return fmt.Errorf("SECURITY BLOCKER: policy digest: %w", err)
 	}
@@ -195,6 +217,13 @@ func runGuardedAgent(argv []string) (resultErr error) {
 		CgroupFD: int(cgfd.Fd()),
 		Pdeathsig: syscall.SIGKILL,
 	}
+	// Revalidate remote authorization after attaching all links, immediately
+	// before spawning. This narrows (but cannot eliminate) the remote race.
+	if preflight.PolicySource == "control_plane" {
+		if err := checkGuardedRemotePolicy(context.Background(), preflight, uid, gid, fsArgs, filter, digest); err != nil {
+			return fmt.Errorf("SECURITY BLOCKER: pre-spawn remote authorization lost: %w", err)
+		}
+	}
 	// Mark all ambient non-stdio descriptors close-on-exec. os/exec
 	// deliberately remaps only the sealed filter from ExtraFiles to FD 3.
 	if err := sealAmbientDescriptors(); err != nil {
@@ -210,19 +239,38 @@ func runGuardedAgent(argv []string) (resultErr error) {
 	stops := make(chan os.Signal, 1)
 	signal.Notify(stops, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(stops)
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-stops:
-			if err := killProtectedCgroup(cg); err != nil {
-				log.Printf("SECURITY CRITICAL: failed to terminate protected cgroup on shutdown: %v", err)
-			}
-		case <-done:
-		}
-	}()
-
-	waitErr := cmd.Wait()
-	close(done)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// A remote policy failure triggers termination of the entire cgroup,
+	// while the original immutable enforcement remains installed.
+	var watchdog <-chan error
+	var watcherDone chan struct{}
+	if preflight.PolicySource == "control_plane" {
+		result := make(chan error, 1)
+		watchdog = result
+		watcherDone = make(chan struct{})
+		go func() {
+			defer close(watcherDone)
+			result <- watchGuardedRemotePolicy(ctx, guardedPolicyWatchInterval, func(ctx context.Context) error {
+				return checkGuardedRemotePolicy(ctx, preflight, uid, gid, fsArgs, filter, digest)
+			})
+		}()
+		defer func() { cancel(); <-watcherDone }()
+	}
+	waited := make(chan error, 1)
+	go func() { waited <- cmd.Wait() }()
+	var waitErr, policyErr error
+	childExited := false
+	select {
+	case waitErr = <-waited:
+		childExited = true
+	case <-stops:
+		log.Print("protected workload shutdown requested")
+	case policyErr = <-watchdog:
+		if policyErr == nil { policyErr = fmt.Errorf("remote policy watchdog stopped unexpectedly") }
+		log.Printf("SECURITY BLOCKER: active guarded policy authorization lost: %v", policyErr)
+	}
+	cancel()
 	// A successful direct child exit does NOT imply descendants have exited.
 	// Kill the full cgroup before releasing the hook; fail the command if this
 	// cannot be verified. Abnormal supervisor death remains out of scope.
@@ -233,6 +281,8 @@ func runGuardedAgent(argv []string) (resultErr error) {
 		return fmt.Errorf("SECURITY CRITICAL: cannot confirm protected workload exited: %w", err)
 	}
 	terminated = true
+	if !childExited { waitErr = <-waited }
+	if policyErr != nil { return fmt.Errorf("SECURITY BLOCKER: active guarded policy authorization lost: %w", policyErr) }
 	if waitErr != nil {
 		return fmt.Errorf("protected workload exited with error: %w", waitErr)
 	}
@@ -286,7 +336,8 @@ func guardedWorkloadEnvironment(env []string) []string {
 			strings.HasPrefix(entry, "GAVEL_MONITORED_PIDS=") ||
 			strings.HasPrefix(entry, "GAVEL_ENGINE_URL=") ||
 			strings.HasPrefix(entry, "GAVEL_PROXY_") ||
-			strings.HasPrefix(entry, "GAVEL_CGROUP_PATH=") {
+			strings.HasPrefix(entry, "GAVEL_CGROUP_PATH=") ||
+			strings.HasPrefix(entry, guardedBootRequiredEnv+"=") {
 			continue
 		}
 		out = append(out, entry)
