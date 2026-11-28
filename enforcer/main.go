@@ -98,6 +98,12 @@ func main() {
 		log.Printf("guarded workload %s recovered: terminated, unpinned and removed", os.Args[2])
 		return
 	}
+	if len(os.Args) >= 2 && os.Args[1] == "boot-init" {
+		if len(os.Args) != 2 { log.Fatal("usage: gavel-enforcer boot-init") }
+		if err := initializeGuardedBoot(); err != nil { log.Fatalf("SECURITY BLOCKER: guarded boot initialization failed: %v",err) }
+		log.Print("guarded boot initialization complete")
+		return
+	}
 	if len(os.Args) >= 2 && os.Args[1] == "recover-orphans" {
 		if len(os.Args) != 2 {
 			log.Fatal("usage: gavel-enforcer recover-orphans; requires trusted privileged operator")
