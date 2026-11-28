@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -45,22 +43,19 @@ type guardedSweepResult struct {
 }
 
 func verifyGuardedRecoveryTarget(parent, name string) error {
-	cgroup := filepath.Join(parent, name)
-	if err := validateGuardedCgroup(cgroup); err != nil {
-		return err
+	_, count, err := inspectGuardedRecoveryTarget(parent, name)
+	if err == nil && count != len(guardedNetworkPinSuffixes) {
+		return fmt.Errorf("required pins missing: %d present", count)
 	}
-	stat, err := os.Stat(cgroup)
-	if err != nil {
-		return err
-	}
-	st, ok := stat.Sys().(*syscall.Stat_t)
-	if !ok || st.Ino == 0 {
-		return fmt.Errorf("cannot establish cgroup kernel identity")
-	}
+	return err
+}
+
+func inspectGuardedRecoveryTarget(parent, name string) (guardedRecoveryReceipt, int, error) {
+	id, err := guardedRecoveryIdentity(parent, name)
+	if err != nil { return id, 0, err }
 	base, err := guardedPinPath(name)
-	if err != nil {
-		return err
-	}
+	if err != nil { return id, 0, err }
+	count := 0
 	hooks := []struct{
 		suffix string
 		attach ebpf.AttachType
@@ -73,20 +68,22 @@ func verifyGuardedRecoveryTarget(parent, name string) error {
 	for _, hook := range hooks {
 		pin := base + hook.suffix
 		l, err := link.LoadPinnedLink(pin, nil)
+		if os.IsNotExist(err) { continue }
 		if err != nil {
-			return fmt.Errorf("cannot verify required pin %s: %w", pin, err)
+			return id, count, fmt.Errorf("cannot verify pin %s: %w", pin, err)
 		}
 		info, err := l.Info()
 		_ = l.Close()
 		if err != nil {
-			return fmt.Errorf("read kernel link metadata %s: %w", pin, err)
+			return id, count, fmt.Errorf("read kernel link metadata %s: %w", pin, err)
 		}
 		cg := info.Cgroup()
-		if cg == nil || cg.CgroupId != st.Ino || ebpf.AttachType(cg.AttachType) != hook.attach {
-			return fmt.Errorf("pin %s does not bind expected cgroup and hook", pin)
+		if cg == nil || cg.CgroupId != id.Inode || ebpf.AttachType(cg.AttachType) != hook.attach {
+			return id, count, fmt.Errorf("pin %s does not bind expected cgroup and hook", pin)
 		}
+		count++
 	}
-	return nil
+	return id, count, nil
 }
 
 // Sweep exactly once. Caller is a trusted host operator or service.
@@ -112,7 +109,20 @@ func sweepGuardedOrphans() (guardedSweepResult, error) {
 		return result, err
 	}
 	var failures error
-	for _, name := range guardedSweepCandidates(entries) {
+	candidates := guardedSweepCandidates(entries)
+	receipts, err := os.ReadDir(guardedLifecycleRoot)
+	if err != nil && !os.IsNotExist(err) { return result, err }
+	seen := map[string]bool{}
+	for _, name := range candidates { seen[name] = true }
+	for _, entry := range receipts {
+		name := strings.TrimSuffix(entry.Name(), guardedRecoveryReceiptSuffix)
+		if name != entry.Name() && guardedCgroupName.MatchString(name) && !seen[name] {
+			candidates = append(candidates, name)
+			seen[name] = true
+		}
+	}
+	sort.Strings(candidates)
+	for _, name := range candidates {
 		state, err := sweepGuardedCandidate(parent, name)
 		if err != nil {
 			failures = errors.Join(failures, fmt.Errorf("%s: %w", name, err))
@@ -140,28 +150,5 @@ func sweepGuardedCandidate(parent, name string) (string, error) {
 		return "", err
 	}
 	defer lease.Close()
-	// A live supervisor may have completed normal cleanup between the
-	// directory snapshot and lease acquisition. Recheck under the lease.
-	base, err := guardedPinPath(name)
-	if err != nil {
-		return "", err
-	}
-	present := false
-	for _, suffix := range guardedNetworkPinSuffixes {
-		if _, err := os.Lstat(base + suffix); err == nil {
-			present = true
-		} else if !os.IsNotExist(err) {
-			return "", err
-		}
-	}
-	if !present {
-		return "gone", nil
-	}
-	if err := verifyGuardedRecoveryTarget(parent, name); err != nil {
-		return "", err
-	}
-	if err := recoverGuardedAgentLocked(parent, name); err != nil {
-		return "", err
-	}
-	return "recovered", nil
+	return recoverGuardedCandidateLocked(parent, name)
 }
