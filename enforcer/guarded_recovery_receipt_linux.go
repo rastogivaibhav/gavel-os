@@ -92,6 +92,12 @@ func clearGuardedRecoveryReceipt(name string) error {
 // lease. At least one matching pin is required for initial attribution;
 // no-pin recovery is allowed only with the trusted empty-state receipt.
 func recoverGuardedCandidateLocked(parent, name string) (string, error) {
+	return recoverGuardedCandidateWithCheckpoint(parent, name, nil)
+}
+
+// The internal observer is used only by the isolated test binary; there is
+// no command-line or environment option enabling interruption in production.
+func recoverGuardedCandidateWithCheckpoint(parent, name string, checkpoint func(string)) (string, error) {
 	base, err := guardedPinPath(name)
 	if err != nil { return "", err }
 	receipt, err := readGuardedRecoveryReceipt(name)
@@ -128,13 +134,16 @@ func recoverGuardedCandidateLocked(parent, name string) (string, error) {
 		if err := waitProtectedCgroupEmpty(cg, 5*time.Second); err != nil { return "", fmt.Errorf("protected cgroup not empty; retain pins: %w", err) }
 		if err := writeGuardedRecoveryReceipt(id); err != nil { return "", fmt.Errorf("cannot journal empty target; retain pins: %w", err) }
 	}
+	if checkpoint != nil { checkpoint("receipt") }
 	// Recheck emptiness and identity before removing the first/next pin.
 	current, _, err := inspectGuardedRecoveryTarget(parent, name)
 	if err != nil { return "", err }
 	if current != id { return "", fmt.Errorf("recovery target changed") }
 	if err := waitProtectedCgroupEmpty(cg, 0); err != nil { return "", err }
-	if err := unpinGuardedEnforcer(name); err != nil { return "", err }
+	if err := unpinGuardedEnforcerWithCheckpoint(name, checkpoint); err != nil { return "", err }
+	if checkpoint != nil { checkpoint("all-unpinned") }
 	if err := os.Remove(cg); err != nil { return "", err }
+	if checkpoint != nil { checkpoint("cgroup-removed") }
 	if err := clearGuardedRecoveryReceipt(name); err != nil { return "", err }
 	return "recovered", nil
 }
