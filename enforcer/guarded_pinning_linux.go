@@ -136,7 +136,7 @@ func unpinGuardedEnforcer(name string) error {
 	for i := len(guardedNetworkPinSuffixes)-1; i >= 0; i-- {
 		pin := base + guardedNetworkPinSuffixes[i]
 		attached, err := link.LoadPinnedLink(pin, nil)
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOENT) {
 			continue
 		}
 		if err != nil {
