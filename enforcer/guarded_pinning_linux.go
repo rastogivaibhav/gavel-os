@@ -175,28 +175,6 @@ func recoverGuardedAgent(name string) error {
 	if !ok {
 		return fmt.Errorf("cannot resolve protected cgroup parent")
 	}
-	return recoverGuardedAgentLocked(parent, name)
-}
-
-// Caller must hold the lifecycle lease until recovery returns.
-func recoverGuardedAgentLocked(parent, name string) error {
-	cgroup := filepath.Join(parent, name)
-	if err := validateGuardedCgroup(cgroup); err != nil {
-		return fmt.Errorf("protected cgroup missing or untrusted %s: %w", cgroup, err)
-	}
-	// Do not remove the only remaining enforcement attachment when we
-	// cannot stop the processes it protects.
-	if err := killProtectedCgroup(cgroup); err != nil {
-		return fmt.Errorf("SECURITY BLOCKER: cannot kill protected cgroup: %w", err)
-	}
-	if err := waitProtectedCgroupEmpty(cgroup, 5e9); err != nil {
-		return fmt.Errorf("SECURITY BLOCKER: protected cgroup not empty; link remains pinned: %w", err)
-	}
-	if err := unpinGuardedEnforcer(name); err != nil {
-		return fmt.Errorf("SECURITY BLOCKER: protected workload stopped but pinned link cleanup failed: %w", err)
-	}
-	if err := os.Remove(cgroup); err != nil {
-		return fmt.Errorf("remove recovered protected cgroup: %w", err)
-	}
-	return nil
+	_, err = recoverGuardedCandidateLocked(parent, name)
+	return err
 }
