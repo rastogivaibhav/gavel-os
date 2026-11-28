@@ -39,6 +39,15 @@ func runGuardedAgentWithApproval(argv []string, approval string) (resultErr erro
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("guarded runner requires a privileged supervisor in an isolated cgroup-v2 host")
 	}
+	bootLease, err := acquireGuardedBootLease(false)
+	if err != nil { return fmt.Errorf("SECURITY BLOCKER: boot lifecycle: %w",err) }
+	defer bootLease.Close()
+	if value, set := os.LookupEnv(guardedBootRequiredEnv); set {
+		if value != "1" { return fmt.Errorf("SECURITY BLOCKER: invalid boot initialization requirement") }
+		parent, ok := resolveLinuxCgroupPath()
+		if !ok { return fmt.Errorf("SECURITY BLOCKER: cannot resolve boot cgroup parent") }
+		if err := requireGuardedBootReady(parent); err != nil { return fmt.Errorf("SECURITY BLOCKER: boot initialization: %w",err) }
+	}
 	uid, gid, err := guardedUnprivilegedIdentity()
 	if err != nil {
 		return err
@@ -327,7 +336,8 @@ func guardedWorkloadEnvironment(env []string) []string {
 			strings.HasPrefix(entry, "GAVEL_MONITORED_PIDS=") ||
 			strings.HasPrefix(entry, "GAVEL_ENGINE_URL=") ||
 			strings.HasPrefix(entry, "GAVEL_PROXY_") ||
-			strings.HasPrefix(entry, "GAVEL_CGROUP_PATH=") {
+			strings.HasPrefix(entry, "GAVEL_CGROUP_PATH=") ||
+			strings.HasPrefix(entry, guardedBootRequiredEnv+"=") {
 			continue
 		}
 		out = append(out, entry)
