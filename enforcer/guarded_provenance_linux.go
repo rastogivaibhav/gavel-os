@@ -72,6 +72,10 @@ func guardedPolicyDigest(config LinuxEnforcerConfig, uid,gid uint32, source stri
 func verifyGuardedPolicyDigest(actual string)error{
 	expected,set:=os.LookupEnv(guardedExpectedDigestEnv)
 	if !set{return nil}
+	return verifyGuardedApprovedDigest(expected, actual)
+}
+
+func verifyGuardedApprovedDigest(expected, actual string) error {
 	if len(expected)!=71||!strings.HasPrefix(expected,"sha256:")||expected!=strings.ToLower(expected){
 		return fmt.Errorf("expected policy digest must be sha256: followed by 64 lowercase hex digits")
 	}
