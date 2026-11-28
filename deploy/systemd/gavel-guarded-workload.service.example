@@ -10,7 +10,7 @@ User=root
 Environment=GAVEL_CGROUP_PATH=/sys/fs/cgroup
 Environment=GAVEL_REQUIRE_BOOT_INIT=1
 EnvironmentFile=/etc/gavel/guarded-workload.env
-ExecStart=/usr/local/bin/gavel-enforcer run /opt/gavel/workload
+ExecStart=/usr/bin/env GAVEL_REQUIRE_BOOT_INIT=1 /usr/local/bin/gavel-enforcer run /opt/gavel/workload
 Restart=no
 
 [Install]
